@@ -1,7 +1,7 @@
-const NODE_IMG_DIR = "clickable_function_imgs/";
-const WIDGET_IMG_DIR = "widgets/";
+export const NODE_IMG_DIR = "clickable_function_imgs/";
+export const WIDGET_IMG_DIR = "widgets/";
 
-const APP_PAGES = [
+export const appPages = [
   { title: "root", type: "root", imageIndex: 0, purpose: "应用总入口，承载首页、搜索、商品、订单、消息、账户等核心模块。" },
   { title: "应用首页", type: "home", imageIndex: 1, purpose: "聚合业务入口、活动 Banner、城市定位和新人引导。" },
   { title: "搜索中心", type: "search", imageIndex: 2, purpose: "承接用户主动搜索、历史搜索、热门词和筛选条件。" },
@@ -34,7 +34,7 @@ const APP_PAGES = [
   { title: "会员中心页", type: "membership", imageIndex: 29, purpose: "展示会员等级、权益和成长任务。" }
 ];
 
-const APP_EDGES = [
+export const appEdges = [
   ["root", "应用首页", "进入应用首页", 0],
   ["root", "搜索中心", "进入搜索中心", 1],
   ["root", "商品频道", "进入商品频道", 2],
@@ -77,3 +77,53 @@ const APP_EDGES = [
     confidence: 0.9
   }
 }));
+
+export const pageMap = new Map(appPages.map((page) => [page.title, page]));
+export const childrenMap = appEdges.reduce((map, edge) => {
+  if (!map.has(edge.from)) map.set(edge.from, []);
+  map.get(edge.from).push(edge);
+  return map;
+}, new Map());
+export const parentMap = new Map(appEdges.map((edge) => [edge.to, edge.from]));
+export const incomingMap = appEdges.reduce((map, edge) => {
+  if (!map.has(edge.to)) map.set(edge.to, []);
+  map.get(edge.to).push(edge);
+  return map;
+}, new Map());
+
+const categoryRules = [
+  { label: "核心入口", tone: "blue", types: ["root", "home"] },
+  { label: "搜索链路", tone: "cyan", types: ["search", "search_result", "search_trend", "filter", "history"] },
+  { label: "交易链路", tone: "green", types: ["commerce", "product_detail", "review", "store", "cart"] },
+  { label: "订单履约", tone: "amber", types: ["order", "order_list", "payment", "logistics", "refund"] },
+  { label: "消息触达", tone: "violet", types: ["message", "notification", "support", "campaign_message", "inbox_detail"] },
+  { label: "账户资产", tone: "rose", types: ["account", "profile", "address", "settings", "membership"] },
+  { label: "运营承接", tone: "slate", types: ["guide", "campaign", "location"] }
+];
+
+export function getOutgoingEdges(title) {
+  return childrenMap.get(title) || [];
+}
+
+export function getIncomingEdges(title) {
+  return incomingMap.get(title) || [];
+}
+
+export function getGraphLevel(title) {
+  if (title === "root") return 1;
+  return parentMap.get(title) === "root" ? 2 : 3;
+}
+
+export function getPageCategory(page) {
+  return categoryRules.find((rule) => rule.types.includes(page.type)) || { label: "普通页面", tone: "slate" };
+}
+
+export function getAncestorPath(title) {
+  const path = [];
+  let cursor = title;
+  while (cursor) {
+    path.unshift(cursor);
+    cursor = parentMap.get(cursor);
+  }
+  return path;
+}
