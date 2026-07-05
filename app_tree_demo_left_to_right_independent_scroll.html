@@ -1,0 +1,4287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>三方应用 APP 横向树形图谱 Demo - 稳定版</title>
+  <style>
+    :root {
+      --bg:#f5f7fb; --panel:#fff; --border:#d8dee9; --line:#94a3b8; --text:#1f2937;
+      --muted:#64748b; --primary:#2563eb; --root:#2563eb; --level2:#7c3aed; --level3:#0f766e;
+      --code-bg:#0f172a; --shadow:0 10px 28px rgba(15,23,42,.08);
+    }
+    * { box-sizing:border-box; }
+    html, body {
+      width:100%;
+      height:100%;
+      overflow:hidden;
+    }
+    body {
+      margin:0;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+      background:var(--bg);
+      color:var(--text);
+    }
+    .app {
+      display:grid;
+      grid-template-columns:280px minmax(980px,1fr) 460px;
+      width:100vw;
+      height:100vh;
+      min-height:0;
+      overflow:hidden;
+    }
+    .nav {
+      background:#fff;
+      border-right:1px solid var(--border);
+      display:flex;
+      flex-direction:column;
+      min-width:0;
+      min-height:0;
+      overflow:hidden;
+    }
+    .nav-header { min-height:72px; padding:14px 16px; border-bottom:1px solid var(--border); display:flex; flex-direction:column; justify-content:center; gap:4px; }
+    .nav-title { font-size:16px; font-weight:900; }
+    .nav-sub { font-size:12px; color:var(--muted); }
+    .tree-nav {
+      flex:1;
+      min-height:0;
+      overflow:auto;
+      padding:12px 10px 18px;
+      overscroll-behavior:contain;
+    }
+    .nav-node { margin:2px 0; border-radius:10px; }
+    .nav-row { display:grid; grid-template-columns:22px 1fr auto; align-items:center; gap:5px; min-height:34px; padding:5px 7px; border-radius:10px; cursor:pointer; font-size:13px; }
+    .nav-row:hover { background:#f1f5f9; }
+    .nav-row.active { background:#eaf1ff; color:var(--primary); font-weight:800; }
+    .toggle { width:20px; height:20px; border:1px solid var(--border); border-radius:6px; background:#fff; color:#475569; display:inline-flex; align-items:center; justify-content:center; font-size:11px; cursor:pointer; }
+    .toggle.leaf { border-color:transparent; background:transparent; cursor:default; }
+    .nav-name { min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .nav-count { font-size:11px; color:var(--muted); background:#f1f5f9; padding:1px 6px; border-radius:999px; }
+    .nav-children { margin-left:18px; padding-left:8px; border-left:1px dashed #cbd5e1; display:block; }
+    .nav-node.collapsed > .nav-children { display:none; }
+
+    .main {
+      display:flex;
+      flex-direction:column;
+      min-width:0;
+      min-height:0;
+      border-right:1px solid var(--border);
+      overflow:hidden;
+    }
+    .toolbar { min-height:72px; display:flex; align-items:center; gap:12px; padding:0 18px; background:#fff; border-bottom:1px solid var(--border); }
+    h1 { margin:0; font-size:18px; white-space:nowrap; }
+    .badge { display:inline-flex; align-items:center; height:24px; padding:0 9px; border-radius:999px; background:#eaf1ff; color:var(--primary); font-size:12px; font-weight:700; white-space:nowrap; }
+    .toolbar input { margin-left:auto; width:300px; height:36px; padding:0 12px; border:1px solid var(--border); border-radius:8px; outline:none; font-size:14px; }
+
+    .graph-scroll {
+      flex:1;
+      min-height:0;
+      overflow:auto;
+      padding:36px 52px 64px;
+      overscroll-behavior:contain;
+      scroll-behavior:smooth;
+    }
+    .graph { min-width:1460px; display:grid; grid-template-columns:260px 1fr; column-gap:82px; align-items:start; position:relative; }
+    .root-col { padding-top:350px; display:flex; justify-content:center; position:relative; }
+    .branches-col { display:flex; flex-direction:column; gap:34px; position:relative; }
+    .root-bus { position:absolute; left:245px; top:92px; bottom:92px; width:2px; background:var(--line); }
+    .root-bus::before { content:""; position:absolute; left:-245px; top:330px; width:245px; height:2px; background:var(--line); }
+    .branch { display:grid; grid-template-columns:210px 1fr; column-gap:70px; min-height:190px; position:relative; align-items:center; }
+    .branch::before { content:""; position:absolute; left:-82px; top:50%; width:82px; height:2px; background:var(--line); }
+    .parent-wrap { position:relative; display:flex; align-items:center; min-height:150px; }
+    .children { position:relative; display:flex; flex-direction:column; gap:16px; padding-left:28px; }
+    .children::before { content:""; position:absolute; left:0; top:28px; bottom:28px; width:2px; background:var(--line); }
+    .child-wrap { position:relative; }
+    .child-wrap::before { content:""; position:absolute; left:-28px; top:50%; width:28px; height:2px; background:var(--line); }
+
+    .node-card { width:184px; min-height:132px; background:#fff; border:2px solid var(--border); border-radius:16px; box-shadow:var(--shadow); padding:10px; cursor:pointer; transition:.16s ease; position:relative; scroll-margin:120px; }
+    .node-card:hover { transform:translateY(-2px); box-shadow:0 14px 34px rgba(15,23,42,.14); border-color:var(--primary); }
+    .node-card.selected { border-color:var(--primary); box-shadow:0 0 0 4px rgba(37,99,235,.14), var(--shadow); }
+    .node-card.hidden { opacity:.18; filter:grayscale(1); }
+    .level-1 { width:232px; border-color:var(--root); background:linear-gradient(180deg,#eff6ff 0%,#fff 100%); }
+    .level-2 { border-color:var(--level2); }
+    .level-3 { width:176px; min-height:112px; border-color:var(--level3); box-shadow:0 8px 20px rgba(15,23,42,.06); }
+    .thumb { width:100%; height:74px; border-radius:10px; object-fit:cover; border:1px solid var(--border); background:#eef2ff; display:block; }
+    .level-1 .thumb { height:88px; }
+    .level-3 .thumb { height:54px; }
+    .node-title { margin-top:8px; font-size:14px; font-weight:800; text-align:center; line-height:1.3; }
+    .node-type { margin-top:4px; color:var(--muted); font-size:11px; text-align:center; }
+    .node-meta { margin-top:8px; display:flex; justify-content:center; gap:6px; flex-wrap:wrap; }
+    .mini { display:inline-flex; align-items:center; height:19px; padding:0 6px; border-radius:999px; background:#f1f5f9; color:#475569; font-size:11px; font-weight:700; }
+
+    .edge-label { position:absolute; top:50%; left:-30px; transform:translate(-100%,-50%); width:176px; min-height:38px; padding:4px 7px; border-radius:12px; background:#fff; border:1px solid var(--border); color:#475569; font-size:11px; box-shadow:0 4px 12px rgba(15,23,42,.08); display:grid; grid-template-columns:30px 1fr; gap:6px; align-items:center; cursor:pointer; z-index:5; }
+    .edge-label.root-edge { left:-22px; }
+    .edge-label:hover { border-color:var(--primary); color:var(--primary); box-shadow:0 8px 20px rgba(37,99,235,.16); }
+    .edge-label.selected-edge { border-color:var(--primary); box-shadow:0 0 0 3px rgba(37,99,235,.12), 0 8px 20px rgba(37,99,235,.12); }
+    .edge-label img { width:30px; height:30px; object-fit:cover; border-radius:7px; border:1px solid var(--border); background:#f8fafc; }
+    .edge-text { min-width:0; display:flex; flex-direction:column; gap:1px; line-height:1.15; }
+    .edge-name { font-weight:800; color:#334155; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .edge-sub { color:#64748b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:10px; }
+
+    .side {
+      display:flex;
+      flex-direction:column;
+      min-width:0;
+      min-height:0;
+      background:#fff;
+      overflow:hidden;
+    }
+    .side-header { padding:18px; border-bottom:1px solid var(--border); }
+    .side-header h2 { margin:0 0 8px; font-size:17px; }
+    .side-header p { margin:0; color:var(--muted); font-size:13px; line-height:1.6; }
+    .summary { padding:14px 18px; border-bottom:1px solid var(--border); display:grid; gap:8px; background:#fbfdff; font-size:13px; }
+    .summary-row { display:flex; justify-content:space-between; gap:12px; }
+    .summary-row span:first-child { color:var(--muted); }
+    .summary-row span:last-child { font-weight:700; text-align:right; }
+    .image-strip {
+      flex:0 0 auto;
+      padding:12px 18px;
+      display:flex;
+      gap:8px;
+      overflow-x:auto;
+      overflow-y:hidden;
+      border-bottom:1px solid var(--border);
+      overscroll-behavior:contain;
+    }
+    .image-strip img { width:104px; height:190px; object-fit:cover; border:1px solid var(--border); border-radius:10px; background:#fff; }
+    .json-panel {
+      flex:1;
+      min-height:0;
+      margin:0;
+      padding:16px 18px;
+      overflow:auto;
+      overscroll-behavior:contain;
+      background:var(--code-bg);
+      color:#e5e7eb;
+      font-size:12px;
+      line-height:1.55;
+      white-space:pre-wrap;
+      word-break:break-word;
+    }
+
+    .preview { display:none; position:fixed; z-index:50; padding:10px; background:#111827; border-radius:12px; box-shadow:0 18px 46px rgba(15,23,42,.35); pointer-events:none; }
+    .preview-title { margin:2px 4px 10px; color:#fff; font-size:13px; font-weight:800; }
+    .preview-imgs { display:flex; gap:8px; }
+    .preview-imgs img { width:130px; height:238px; object-fit:cover; border-radius:8px; background:#fff; border:1px solid rgba(255,255,255,.18); }
+    .hint { position:sticky; left:0; bottom:0; max-width:940px; padding:12px 14px; margin-top:28px; background:rgba(255,255,255,.94); border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow); color:var(--muted); font-size:12px; line-height:1.7; }
+    code { background:#f1f5f9; color:#334155; padding:1px 4px; border-radius:4px; }
+    .hint b { color:var(--text); }
+
+    .tree-nav::-webkit-scrollbar,
+    .graph-scroll::-webkit-scrollbar,
+    .json-panel::-webkit-scrollbar,
+    .image-strip::-webkit-scrollbar {
+      width:10px;
+      height:10px;
+    }
+    .tree-nav::-webkit-scrollbar-thumb,
+    .graph-scroll::-webkit-scrollbar-thumb,
+    .json-panel::-webkit-scrollbar-thumb,
+    .image-strip::-webkit-scrollbar-thumb {
+      background:#cbd5e1;
+      border-radius:999px;
+      border:2px solid transparent;
+      background-clip:content-box;
+    }
+    .tree-nav::-webkit-scrollbar-thumb:hover,
+    .graph-scroll::-webkit-scrollbar-thumb:hover,
+    .json-panel::-webkit-scrollbar-thumb:hover,
+    .image-strip::-webkit-scrollbar-thumb:hover {
+      background:#94a3b8;
+      border:2px solid transparent;
+      background-clip:content-box;
+    }
+
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <aside class="nav">
+      <div class="nav-header">
+        <div class="nav-title">页面层级导航</div>
+        <div class="nav-sub">左侧独立滚动；点击定位；按钮展开 / 收起</div>
+      </div>
+      <div class="tree-nav" id="treeNav"></div>
+    </aside>
+
+    <main class="main">
+      <div class="toolbar">
+        <h1>三方应用 APP 横向树形图谱 Demo</h1>
+        <span class="badge">稳定版</span>
+        <span class="badge">从左到右</span>
+        <span class="badge">30 节点</span>
+        <span class="badge">29 边</span>
+        <span class="badge">中间独立滚动</span>
+        <input id="searchInput" placeholder="搜索页面 / 组件 / 图片序号" />
+      </div>
+
+      <div class="graph-scroll" id="graphScroll">
+        <div class="graph" id="graphRoot"></div>
+        <div class="hint">
+          <div><b>图片加载：</b>支持 <code>clickable_function_imgs/0</code>、<code>0.png</code>、<code>0.PNG</code>、<code>0.jpg</code>、<code>0.jpeg</code>、<code>0.webp</code> 等命名。</div>
+          <div><b>边按钮：</b>每条边展示 <code>widgets/序号</code> 图片；点击边标签查看完整 widget JSON。</div>
+          <div><b>JSON：</b>右侧保留完整原始页面结构，包括 observed_facts、layout、widgets、navigation、entities、actions、embedding_text。</div>
+        </div>
+      </div>
+    </main>
+
+    <aside class="side">
+      <div class="side-header">
+        <h2 id="detailTitle">节点详情</h2>
+        <p>点击节点查看页面结构；点击边上的按钮图查看 widget 跳转信息。右侧详情独立滚动。</p>
+      </div>
+      <div class="summary" id="summaryPanel"></div>
+      <div class="image-strip" id="imageStrip"></div>
+      <pre class="json-panel" id="jsonPanel">点击左侧节点查看完整 JSON。</pre>
+    </aside>
+  </div>
+
+  <div class="preview" id="preview">
+    <div class="preview-title" id="previewTitle"></div>
+    <div class="preview-imgs" id="previewImgs"></div>
+  </div>
+
+<script>
+const NODE_IMG_DIR = "clickable_function_imgs/";
+const WIDGET_IMG_DIR = "widgets/";
+// 兼容无后缀、小写后缀、大写后缀。
+const IMG_EXTS = ["", ".png", ".PNG", ".jpg", ".JPG", ".jpeg", ".JPEG", ".webp", ".WEBP"];
+
+const APP_PAGES = [
+  {
+    "page_title": "root",
+    "page_type": "root",
+    "page_text": "root 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 0,
+    "image_indexes": [
+      0,
+      30
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "root",
+        "首页入口",
+        "底部导航"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/0"
+      ],
+      "visible_lists": [
+        "首页模块入口"
+      ],
+      "visible_tabs": [
+        "首页",
+        "分类",
+        "消息",
+        "我的"
+      ]
+    },
+    "inferred_purpose": "承载 root 的核心业务能力和页面跳转入口。",
+    "main_content": "root 主内容区域",
+    "layout": {
+      "screen_type": "feed",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "root",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "bottom_nav",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": [
+            "首页",
+            "分类",
+            "消息",
+            "我的"
+          ]
+        }
+      ]
+    },
+    "widgets": [
+      {
+        "widget_id_hint": "widget_0",
+        "widget_type": "button",
+        "text": "应用首页",
+        "semantic_name": "进入应用首页",
+        "function": "从root进入应用首页",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "应用首页",
+        "widget_image_index": 0,
+        "confidence": 0.9
+      },
+      {
+        "widget_id_hint": "widget_1",
+        "widget_type": "button",
+        "text": "搜索中心",
+        "semantic_name": "进入搜索中心",
+        "function": "从root进入搜索中心",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "搜索中心",
+        "widget_image_index": 1,
+        "confidence": 0.9
+      },
+      {
+        "widget_id_hint": "widget_2",
+        "widget_type": "button",
+        "text": "商品频道",
+        "semantic_name": "进入商品频道",
+        "function": "从root进入商品频道",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "商品频道",
+        "widget_image_index": 2,
+        "confidence": 0.9
+      },
+      {
+        "widget_id_hint": "widget_3",
+        "widget_type": "button",
+        "text": "订单中心",
+        "semantic_name": "进入订单中心",
+        "function": "从root进入订单中心",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "订单中心",
+        "widget_image_index": 3,
+        "confidence": 0.9
+      },
+      {
+        "widget_id_hint": "widget_4",
+        "widget_type": "button",
+        "text": "消息中心",
+        "semantic_name": "进入消息中心",
+        "function": "从root进入消息中心",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "消息中心",
+        "widget_image_index": 4,
+        "confidence": 0.9
+      },
+      {
+        "widget_id_hint": "widget_5",
+        "widget_type": "button",
+        "text": "我的账户",
+        "semantic_name": "进入我的账户",
+        "function": "从root进入我的账户",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "我的账户",
+        "widget_image_index": 5,
+        "confidence": 0.9
+      }
+    ],
+    "navigation": {
+      "back_available": false,
+      "top_tabs": [],
+      "bottom_tabs": [
+        "首页",
+        "分类",
+        "消息",
+        "我的"
+      ],
+      "primary_actions": [
+        "进入应用首页",
+        "进入搜索中心",
+        "进入商品频道",
+        "进入订单中心",
+        "进入消息中心",
+        "进入我的账户"
+      ]
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "root 中展示的业务实体"
+      }
+    ],
+    "actions": [
+      "从root进入应用首页",
+      "从root进入搜索中心",
+      "从root进入商品频道",
+      "从root进入订单中心",
+      "从root进入消息中心",
+      "从root进入我的账户"
+    ],
+    "semantic_keywords": [
+      "root",
+      "root",
+      "第1层",
+      "root",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "root root 第1层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 1,
+      "parent_page_title": null,
+      "node_image_rule": "clickable_function_imgs/0[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": false
+    }
+  },
+  {
+    "page_title": "应用首页",
+    "page_type": "home",
+    "page_text": "应用首页 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 1,
+    "image_indexes": [
+      1
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "应用首页",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/1"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": [
+        "首页",
+        "分类",
+        "消息",
+        "我的"
+      ]
+    },
+    "inferred_purpose": "承载 应用首页 的核心业务能力和页面跳转入口。",
+    "main_content": "应用首页 主内容区域",
+    "layout": {
+      "screen_type": "tab_page",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "应用首页",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "bottom_nav",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": [
+            "首页",
+            "分类",
+            "消息",
+            "我的"
+          ]
+        }
+      ]
+    },
+    "widgets": [
+      {
+        "widget_id_hint": "widget_6",
+        "widget_type": "button",
+        "text": "新人引导页",
+        "semantic_name": "进入新人引导页",
+        "function": "从应用首页进入新人引导页",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "新人引导页",
+        "widget_image_index": 6,
+        "confidence": 0.9
+      },
+      {
+        "widget_id_hint": "widget_7",
+        "widget_type": "button",
+        "text": "Banner活动页",
+        "semantic_name": "进入Banner活动页",
+        "function": "从应用首页进入Banner活动页",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "Banner活动页",
+        "widget_image_index": 7,
+        "confidence": 0.9
+      },
+      {
+        "widget_id_hint": "widget_8",
+        "widget_type": "button",
+        "text": "城市选择页",
+        "semantic_name": "进入城市选择页",
+        "function": "从应用首页进入城市选择页",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "城市选择页",
+        "widget_image_index": 8,
+        "confidence": 0.9
+      }
+    ],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [
+        "首页",
+        "分类",
+        "消息",
+        "我的"
+      ],
+      "primary_actions": [
+        "进入新人引导页",
+        "进入Banner活动页",
+        "进入城市选择页"
+      ]
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "应用首页 中展示的业务实体"
+      }
+    ],
+    "actions": [
+      "从应用首页进入新人引导页",
+      "从应用首页进入Banner活动页",
+      "从应用首页进入城市选择页"
+    ],
+    "semantic_keywords": [
+      "应用首页",
+      "home",
+      "第2层",
+      "root",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "应用首页 home 第2层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 2,
+      "parent_page_title": "root",
+      "node_image_rule": "clickable_function_imgs/1[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": false
+    }
+  },
+  {
+    "page_title": "搜索中心",
+    "page_type": "search",
+    "page_text": "搜索中心 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 2,
+    "image_indexes": [
+      2
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "搜索中心",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/2"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": [
+        "首页",
+        "分类",
+        "消息",
+        "我的"
+      ]
+    },
+    "inferred_purpose": "承载 搜索中心 的核心业务能力和页面跳转入口。",
+    "main_content": "搜索中心 主内容区域",
+    "layout": {
+      "screen_type": "tab_page",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "搜索中心",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "bottom_nav",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": [
+            "首页",
+            "分类",
+            "消息",
+            "我的"
+          ]
+        }
+      ]
+    },
+    "widgets": [
+      {
+        "widget_id_hint": "widget_9",
+        "widget_type": "button",
+        "text": "搜索结果页",
+        "semantic_name": "进入搜索结果页",
+        "function": "从搜索中心进入搜索结果页",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "搜索结果页",
+        "widget_image_index": 9,
+        "confidence": 0.9
+      },
+      {
+        "widget_id_hint": "widget_10",
+        "widget_type": "button",
+        "text": "热门搜索页",
+        "semantic_name": "进入热门搜索页",
+        "function": "从搜索中心进入热门搜索页",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "热门搜索页",
+        "widget_image_index": 10,
+        "confidence": 0.9
+      },
+      {
+        "widget_id_hint": "widget_11",
+        "widget_type": "button",
+        "text": "筛选弹窗",
+        "semantic_name": "进入筛选弹窗",
+        "function": "从搜索中心进入筛选弹窗",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "筛选弹窗",
+        "widget_image_index": 11,
+        "confidence": 0.9
+      },
+      {
+        "widget_id_hint": "widget_12",
+        "widget_type": "button",
+        "text": "搜索历史页",
+        "semantic_name": "进入搜索历史页",
+        "function": "从搜索中心进入搜索历史页",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "搜索历史页",
+        "widget_image_index": 12,
+        "confidence": 0.9
+      }
+    ],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [
+        "首页",
+        "分类",
+        "消息",
+        "我的"
+      ],
+      "primary_actions": [
+        "进入搜索结果页",
+        "进入热门搜索页",
+        "进入筛选弹窗",
+        "进入搜索历史页"
+      ]
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "搜索中心 中展示的业务实体"
+      }
+    ],
+    "actions": [
+      "从搜索中心进入搜索结果页",
+      "从搜索中心进入热门搜索页",
+      "从搜索中心进入筛选弹窗",
+      "从搜索中心进入搜索历史页"
+    ],
+    "semantic_keywords": [
+      "搜索中心",
+      "search",
+      "第2层",
+      "root",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "搜索中心 search 第2层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 2,
+      "parent_page_title": "root",
+      "node_image_rule": "clickable_function_imgs/2[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": false
+    }
+  },
+  {
+    "page_title": "商品频道",
+    "page_type": "product",
+    "page_text": "商品频道 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 3,
+    "image_indexes": [
+      3
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "商品频道",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/3"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": [
+        "首页",
+        "分类",
+        "消息",
+        "我的"
+      ]
+    },
+    "inferred_purpose": "承载 商品频道 的核心业务能力和页面跳转入口。",
+    "main_content": "商品频道 主内容区域",
+    "layout": {
+      "screen_type": "tab_page",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "商品频道",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "bottom_nav",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": [
+            "首页",
+            "分类",
+            "消息",
+            "我的"
+          ]
+        }
+      ]
+    },
+    "widgets": [
+      {
+        "widget_id_hint": "widget_13",
+        "widget_type": "button",
+        "text": "商品详情页",
+        "semantic_name": "进入商品详情页",
+        "function": "从商品频道进入商品详情页",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "商品详情页",
+        "widget_image_index": 13,
+        "confidence": 0.9
+      },
+      {
+        "widget_id_hint": "widget_14",
+        "widget_type": "button",
+        "text": "商品评价页",
+        "semantic_name": "进入商品评价页",
+        "function": "从商品频道进入商品评价页",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "商品评价页",
+        "widget_image_index": 14,
+        "confidence": 0.9
+      },
+      {
+        "widget_id_hint": "widget_15",
+        "widget_type": "button",
+        "text": "店铺主页",
+        "semantic_name": "进入店铺主页",
+        "function": "从商品频道进入店铺主页",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "店铺主页",
+        "widget_image_index": 15,
+        "confidence": 0.9
+      },
+      {
+        "widget_id_hint": "widget_16",
+        "widget_type": "button",
+        "text": "购物车",
+        "semantic_name": "进入购物车",
+        "function": "从商品频道进入购物车",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "购物车",
+        "widget_image_index": 16,
+        "confidence": 0.9
+      }
+    ],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [
+        "首页",
+        "分类",
+        "消息",
+        "我的"
+      ],
+      "primary_actions": [
+        "进入商品详情页",
+        "进入商品评价页",
+        "进入店铺主页",
+        "进入购物车"
+      ]
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "商品频道 中展示的业务实体"
+      }
+    ],
+    "actions": [
+      "从商品频道进入商品详情页",
+      "从商品频道进入商品评价页",
+      "从商品频道进入店铺主页",
+      "从商品频道进入购物车"
+    ],
+    "semantic_keywords": [
+      "商品频道",
+      "product",
+      "第2层",
+      "root",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "商品频道 product 第2层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 2,
+      "parent_page_title": "root",
+      "node_image_rule": "clickable_function_imgs/3[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": false
+    }
+  },
+  {
+    "page_title": "订单中心",
+    "page_type": "order",
+    "page_text": "订单中心 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 4,
+    "image_indexes": [
+      4
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "订单中心",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/4"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": [
+        "首页",
+        "分类",
+        "消息",
+        "我的"
+      ]
+    },
+    "inferred_purpose": "承载 订单中心 的核心业务能力和页面跳转入口。",
+    "main_content": "订单中心 主内容区域",
+    "layout": {
+      "screen_type": "tab_page",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "订单中心",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "bottom_nav",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": [
+            "首页",
+            "分类",
+            "消息",
+            "我的"
+          ]
+        }
+      ]
+    },
+    "widgets": [
+      {
+        "widget_id_hint": "widget_17",
+        "widget_type": "button",
+        "text": "全部订单页",
+        "semantic_name": "进入全部订单页",
+        "function": "从订单中心进入全部订单页",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "全部订单页",
+        "widget_image_index": 17,
+        "confidence": 0.9
+      },
+      {
+        "widget_id_hint": "widget_18",
+        "widget_type": "button",
+        "text": "待付款页",
+        "semantic_name": "进入待付款页",
+        "function": "从订单中心进入待付款页",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "待付款页",
+        "widget_image_index": 18,
+        "confidence": 0.9
+      },
+      {
+        "widget_id_hint": "widget_19",
+        "widget_type": "button",
+        "text": "物流详情页",
+        "semantic_name": "进入物流详情页",
+        "function": "从订单中心进入物流详情页",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "物流详情页",
+        "widget_image_index": 19,
+        "confidence": 0.9
+      },
+      {
+        "widget_id_hint": "widget_20",
+        "widget_type": "button",
+        "text": "退款售后页",
+        "semantic_name": "进入退款售后页",
+        "function": "从订单中心进入退款售后页",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "退款售后页",
+        "widget_image_index": 20,
+        "confidence": 0.9
+      }
+    ],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [
+        "首页",
+        "分类",
+        "消息",
+        "我的"
+      ],
+      "primary_actions": [
+        "进入全部订单页",
+        "进入待付款页",
+        "进入物流详情页",
+        "进入退款售后页"
+      ]
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "订单中心 中展示的业务实体"
+      }
+    ],
+    "actions": [
+      "从订单中心进入全部订单页",
+      "从订单中心进入待付款页",
+      "从订单中心进入物流详情页",
+      "从订单中心进入退款售后页"
+    ],
+    "semantic_keywords": [
+      "订单中心",
+      "order",
+      "第2层",
+      "root",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "订单中心 order 第2层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 2,
+      "parent_page_title": "root",
+      "node_image_rule": "clickable_function_imgs/4[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": false
+    }
+  },
+  {
+    "page_title": "消息中心",
+    "page_type": "message",
+    "page_text": "消息中心 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 5,
+    "image_indexes": [
+      5
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "消息中心",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/5"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": [
+        "首页",
+        "分类",
+        "消息",
+        "我的"
+      ]
+    },
+    "inferred_purpose": "承载 消息中心 的核心业务能力和页面跳转入口。",
+    "main_content": "消息中心 主内容区域",
+    "layout": {
+      "screen_type": "tab_page",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "消息中心",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "bottom_nav",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": [
+            "首页",
+            "分类",
+            "消息",
+            "我的"
+          ]
+        }
+      ]
+    },
+    "widgets": [
+      {
+        "widget_id_hint": "widget_21",
+        "widget_type": "button",
+        "text": "系统通知页",
+        "semantic_name": "进入系统通知页",
+        "function": "从消息中心进入系统通知页",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "系统通知页",
+        "widget_image_index": 21,
+        "confidence": 0.9
+      },
+      {
+        "widget_id_hint": "widget_22",
+        "widget_type": "button",
+        "text": "客服会话页",
+        "semantic_name": "进入客服会话页",
+        "function": "从消息中心进入客服会话页",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "客服会话页",
+        "widget_image_index": 22,
+        "confidence": 0.9
+      },
+      {
+        "widget_id_hint": "widget_23",
+        "widget_type": "button",
+        "text": "活动消息页",
+        "semantic_name": "进入活动消息页",
+        "function": "从消息中心进入活动消息页",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "活动消息页",
+        "widget_image_index": 23,
+        "confidence": 0.9
+      },
+      {
+        "widget_id_hint": "widget_24",
+        "widget_type": "button",
+        "text": "站内信详情页",
+        "semantic_name": "进入站内信详情页",
+        "function": "从消息中心进入站内信详情页",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "站内信详情页",
+        "widget_image_index": 24,
+        "confidence": 0.9
+      }
+    ],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [
+        "首页",
+        "分类",
+        "消息",
+        "我的"
+      ],
+      "primary_actions": [
+        "进入系统通知页",
+        "进入客服会话页",
+        "进入活动消息页",
+        "进入站内信详情页"
+      ]
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "消息中心 中展示的业务实体"
+      }
+    ],
+    "actions": [
+      "从消息中心进入系统通知页",
+      "从消息中心进入客服会话页",
+      "从消息中心进入活动消息页",
+      "从消息中心进入站内信详情页"
+    ],
+    "semantic_keywords": [
+      "消息中心",
+      "message",
+      "第2层",
+      "root",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "消息中心 message 第2层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 2,
+      "parent_page_title": "root",
+      "node_image_rule": "clickable_function_imgs/5[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": false
+    }
+  },
+  {
+    "page_title": "我的账户",
+    "page_type": "profile",
+    "page_text": "我的账户 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 6,
+    "image_indexes": [
+      6
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "我的账户",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/6"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": [
+        "首页",
+        "分类",
+        "消息",
+        "我的"
+      ]
+    },
+    "inferred_purpose": "承载 我的账户 的核心业务能力和页面跳转入口。",
+    "main_content": "我的账户 主内容区域",
+    "layout": {
+      "screen_type": "tab_page",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "我的账户",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "bottom_nav",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": [
+            "首页",
+            "分类",
+            "消息",
+            "我的"
+          ]
+        }
+      ]
+    },
+    "widgets": [
+      {
+        "widget_id_hint": "widget_25",
+        "widget_type": "button",
+        "text": "个人资料页",
+        "semantic_name": "进入个人资料页",
+        "function": "从我的账户进入个人资料页",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "个人资料页",
+        "widget_image_index": 25,
+        "confidence": 0.9
+      },
+      {
+        "widget_id_hint": "widget_26",
+        "widget_type": "button",
+        "text": "地址管理页",
+        "semantic_name": "进入地址管理页",
+        "function": "从我的账户进入地址管理页",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "地址管理页",
+        "widget_image_index": 26,
+        "confidence": 0.9
+      },
+      {
+        "widget_id_hint": "widget_27",
+        "widget_type": "button",
+        "text": "设置页",
+        "semantic_name": "进入设置页",
+        "function": "从我的账户进入设置页",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "设置页",
+        "widget_image_index": 27,
+        "confidence": 0.9
+      },
+      {
+        "widget_id_hint": "widget_28",
+        "widget_type": "button",
+        "text": "会员中心页",
+        "semantic_name": "进入会员中心页",
+        "function": "从我的账户进入会员中心页",
+        "relative_position": "middle",
+        "clickable": true,
+        "expected_result": "会员中心页",
+        "widget_image_index": 28,
+        "confidence": 0.9
+      }
+    ],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [
+        "首页",
+        "分类",
+        "消息",
+        "我的"
+      ],
+      "primary_actions": [
+        "进入个人资料页",
+        "进入地址管理页",
+        "进入设置页",
+        "进入会员中心页"
+      ]
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "我的账户 中展示的业务实体"
+      }
+    ],
+    "actions": [
+      "从我的账户进入个人资料页",
+      "从我的账户进入地址管理页",
+      "从我的账户进入设置页",
+      "从我的账户进入会员中心页"
+    ],
+    "semantic_keywords": [
+      "我的账户",
+      "profile",
+      "第2层",
+      "root",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "我的账户 profile 第2层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 2,
+      "parent_page_title": "root",
+      "node_image_rule": "clickable_function_imgs/6[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": false
+    }
+  },
+  {
+    "page_title": "新人引导页",
+    "page_type": "guide",
+    "page_text": "新人引导页 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 7,
+    "image_indexes": [
+      7
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "新人引导页",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/7"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": []
+    },
+    "inferred_purpose": "承载 新人引导页 的核心业务能力和页面跳转入口。",
+    "main_content": "新人引导页 主内容区域",
+    "layout": {
+      "screen_type": "list",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "新人引导页",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "unknown",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": []
+        }
+      ]
+    },
+    "widgets": [],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [],
+      "primary_actions": []
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "新人引导页 中展示的业务实体"
+      }
+    ],
+    "actions": [],
+    "semantic_keywords": [
+      "新人引导页",
+      "guide",
+      "第3层",
+      "应用首页",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "新人引导页 guide 第3层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 3,
+      "parent_page_title": "应用首页",
+      "node_image_rule": "clickable_function_imgs/7[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": true
+    }
+  },
+  {
+    "page_title": "Banner活动页",
+    "page_type": "campaign",
+    "page_text": "Banner活动页 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 8,
+    "image_indexes": [
+      8
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "Banner活动页",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/8"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": []
+    },
+    "inferred_purpose": "承载 Banner活动页 的核心业务能力和页面跳转入口。",
+    "main_content": "Banner活动页 主内容区域",
+    "layout": {
+      "screen_type": "list",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "Banner活动页",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "unknown",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": []
+        }
+      ]
+    },
+    "widgets": [],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [],
+      "primary_actions": []
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "Banner活动页 中展示的业务实体"
+      }
+    ],
+    "actions": [],
+    "semantic_keywords": [
+      "Banner活动页",
+      "campaign",
+      "第3层",
+      "应用首页",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "Banner活动页 campaign 第3层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 3,
+      "parent_page_title": "应用首页",
+      "node_image_rule": "clickable_function_imgs/8[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": true
+    }
+  },
+  {
+    "page_title": "城市选择页",
+    "page_type": "city",
+    "page_text": "城市选择页 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 9,
+    "image_indexes": [
+      9
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "城市选择页",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/9"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": []
+    },
+    "inferred_purpose": "承载 城市选择页 的核心业务能力和页面跳转入口。",
+    "main_content": "城市选择页 主内容区域",
+    "layout": {
+      "screen_type": "list",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "城市选择页",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "unknown",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": []
+        }
+      ]
+    },
+    "widgets": [],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [],
+      "primary_actions": []
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "城市选择页 中展示的业务实体"
+      }
+    ],
+    "actions": [],
+    "semantic_keywords": [
+      "城市选择页",
+      "city",
+      "第3层",
+      "应用首页",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "城市选择页 city 第3层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 3,
+      "parent_page_title": "应用首页",
+      "node_image_rule": "clickable_function_imgs/9[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": true
+    }
+  },
+  {
+    "page_title": "搜索结果页",
+    "page_type": "search_result",
+    "page_text": "搜索结果页 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 10,
+    "image_indexes": [
+      10
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "搜索结果页",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/10"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": []
+    },
+    "inferred_purpose": "承载 搜索结果页 的核心业务能力和页面跳转入口。",
+    "main_content": "搜索结果页 主内容区域",
+    "layout": {
+      "screen_type": "list",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "搜索结果页",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "unknown",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": []
+        }
+      ]
+    },
+    "widgets": [],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [],
+      "primary_actions": []
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "搜索结果页 中展示的业务实体"
+      }
+    ],
+    "actions": [],
+    "semantic_keywords": [
+      "搜索结果页",
+      "search_result",
+      "第3层",
+      "搜索中心",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "搜索结果页 search_result 第3层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 3,
+      "parent_page_title": "搜索中心",
+      "node_image_rule": "clickable_function_imgs/10[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": true
+    }
+  },
+  {
+    "page_title": "热门搜索页",
+    "page_type": "search_hot",
+    "page_text": "热门搜索页 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 11,
+    "image_indexes": [
+      11
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "热门搜索页",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/11"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": []
+    },
+    "inferred_purpose": "承载 热门搜索页 的核心业务能力和页面跳转入口。",
+    "main_content": "热门搜索页 主内容区域",
+    "layout": {
+      "screen_type": "list",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "热门搜索页",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "unknown",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": []
+        }
+      ]
+    },
+    "widgets": [],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [],
+      "primary_actions": []
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "热门搜索页 中展示的业务实体"
+      }
+    ],
+    "actions": [],
+    "semantic_keywords": [
+      "热门搜索页",
+      "search_hot",
+      "第3层",
+      "搜索中心",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "热门搜索页 search_hot 第3层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 3,
+      "parent_page_title": "搜索中心",
+      "node_image_rule": "clickable_function_imgs/11[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": true
+    }
+  },
+  {
+    "page_title": "筛选弹窗",
+    "page_type": "filter",
+    "page_text": "筛选弹窗 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 12,
+    "image_indexes": [
+      12
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "筛选弹窗",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/12"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": []
+    },
+    "inferred_purpose": "承载 筛选弹窗 的核心业务能力和页面跳转入口。",
+    "main_content": "筛选弹窗 主内容区域",
+    "layout": {
+      "screen_type": "list",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "筛选弹窗",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "unknown",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": []
+        }
+      ]
+    },
+    "widgets": [],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [],
+      "primary_actions": []
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "筛选弹窗 中展示的业务实体"
+      }
+    ],
+    "actions": [],
+    "semantic_keywords": [
+      "筛选弹窗",
+      "filter",
+      "第3层",
+      "搜索中心",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "筛选弹窗 filter 第3层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 3,
+      "parent_page_title": "搜索中心",
+      "node_image_rule": "clickable_function_imgs/12[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": true
+    }
+  },
+  {
+    "page_title": "搜索历史页",
+    "page_type": "history",
+    "page_text": "搜索历史页 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 13,
+    "image_indexes": [
+      13
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "搜索历史页",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/13"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": []
+    },
+    "inferred_purpose": "承载 搜索历史页 的核心业务能力和页面跳转入口。",
+    "main_content": "搜索历史页 主内容区域",
+    "layout": {
+      "screen_type": "list",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "搜索历史页",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "unknown",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": []
+        }
+      ]
+    },
+    "widgets": [],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [],
+      "primary_actions": []
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "搜索历史页 中展示的业务实体"
+      }
+    ],
+    "actions": [],
+    "semantic_keywords": [
+      "搜索历史页",
+      "history",
+      "第3层",
+      "搜索中心",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "搜索历史页 history 第3层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 3,
+      "parent_page_title": "搜索中心",
+      "node_image_rule": "clickable_function_imgs/13[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": true
+    }
+  },
+  {
+    "page_title": "商品详情页",
+    "page_type": "detail",
+    "page_text": "商品详情页 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 14,
+    "image_indexes": [
+      14
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "商品详情页",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/14"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": []
+    },
+    "inferred_purpose": "承载 商品详情页 的核心业务能力和页面跳转入口。",
+    "main_content": "商品详情页 主内容区域",
+    "layout": {
+      "screen_type": "list",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "商品详情页",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "unknown",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": []
+        }
+      ]
+    },
+    "widgets": [],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [],
+      "primary_actions": []
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "商品详情页 中展示的业务实体"
+      }
+    ],
+    "actions": [],
+    "semantic_keywords": [
+      "商品详情页",
+      "detail",
+      "第3层",
+      "商品频道",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "商品详情页 detail 第3层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 3,
+      "parent_page_title": "商品频道",
+      "node_image_rule": "clickable_function_imgs/14[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": true
+    }
+  },
+  {
+    "page_title": "商品评价页",
+    "page_type": "review",
+    "page_text": "商品评价页 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 15,
+    "image_indexes": [
+      15
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "商品评价页",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/15"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": []
+    },
+    "inferred_purpose": "承载 商品评价页 的核心业务能力和页面跳转入口。",
+    "main_content": "商品评价页 主内容区域",
+    "layout": {
+      "screen_type": "list",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "商品评价页",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "unknown",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": []
+        }
+      ]
+    },
+    "widgets": [],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [],
+      "primary_actions": []
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "商品评价页 中展示的业务实体"
+      }
+    ],
+    "actions": [],
+    "semantic_keywords": [
+      "商品评价页",
+      "review",
+      "第3层",
+      "商品频道",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "商品评价页 review 第3层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 3,
+      "parent_page_title": "商品频道",
+      "node_image_rule": "clickable_function_imgs/15[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": true
+    }
+  },
+  {
+    "page_title": "店铺主页",
+    "page_type": "shop",
+    "page_text": "店铺主页 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 16,
+    "image_indexes": [
+      16
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "店铺主页",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/16"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": []
+    },
+    "inferred_purpose": "承载 店铺主页 的核心业务能力和页面跳转入口。",
+    "main_content": "店铺主页 主内容区域",
+    "layout": {
+      "screen_type": "list",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "店铺主页",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "unknown",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": []
+        }
+      ]
+    },
+    "widgets": [],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [],
+      "primary_actions": []
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "店铺主页 中展示的业务实体"
+      }
+    ],
+    "actions": [],
+    "semantic_keywords": [
+      "店铺主页",
+      "shop",
+      "第3层",
+      "商品频道",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "店铺主页 shop 第3层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 3,
+      "parent_page_title": "商品频道",
+      "node_image_rule": "clickable_function_imgs/16[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": true
+    }
+  },
+  {
+    "page_title": "购物车",
+    "page_type": "cart",
+    "page_text": "购物车 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 17,
+    "image_indexes": [
+      17
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "购物车",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/17"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": []
+    },
+    "inferred_purpose": "承载 购物车 的核心业务能力和页面跳转入口。",
+    "main_content": "购物车 主内容区域",
+    "layout": {
+      "screen_type": "list",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "购物车",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "unknown",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": []
+        }
+      ]
+    },
+    "widgets": [],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [],
+      "primary_actions": []
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "购物车 中展示的业务实体"
+      }
+    ],
+    "actions": [],
+    "semantic_keywords": [
+      "购物车",
+      "cart",
+      "第3层",
+      "商品频道",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "购物车 cart 第3层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 3,
+      "parent_page_title": "商品频道",
+      "node_image_rule": "clickable_function_imgs/17[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": true
+    }
+  },
+  {
+    "page_title": "全部订单页",
+    "page_type": "order_list",
+    "page_text": "全部订单页 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 18,
+    "image_indexes": [
+      18
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "全部订单页",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/18"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": []
+    },
+    "inferred_purpose": "承载 全部订单页 的核心业务能力和页面跳转入口。",
+    "main_content": "全部订单页 主内容区域",
+    "layout": {
+      "screen_type": "list",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "全部订单页",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "unknown",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": []
+        }
+      ]
+    },
+    "widgets": [],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [],
+      "primary_actions": []
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "全部订单页 中展示的业务实体"
+      }
+    ],
+    "actions": [],
+    "semantic_keywords": [
+      "全部订单页",
+      "order_list",
+      "第3层",
+      "订单中心",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "全部订单页 order_list 第3层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 3,
+      "parent_page_title": "订单中心",
+      "node_image_rule": "clickable_function_imgs/18[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": true
+    }
+  },
+  {
+    "page_title": "待付款页",
+    "page_type": "order_tab",
+    "page_text": "待付款页 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 19,
+    "image_indexes": [
+      19
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "待付款页",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/19"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": []
+    },
+    "inferred_purpose": "承载 待付款页 的核心业务能力和页面跳转入口。",
+    "main_content": "待付款页 主内容区域",
+    "layout": {
+      "screen_type": "list",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "待付款页",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "unknown",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": []
+        }
+      ]
+    },
+    "widgets": [],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [],
+      "primary_actions": []
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "待付款页 中展示的业务实体"
+      }
+    ],
+    "actions": [],
+    "semantic_keywords": [
+      "待付款页",
+      "order_tab",
+      "第3层",
+      "订单中心",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "待付款页 order_tab 第3层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 3,
+      "parent_page_title": "订单中心",
+      "node_image_rule": "clickable_function_imgs/19[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": true
+    }
+  },
+  {
+    "page_title": "物流详情页",
+    "page_type": "logistics",
+    "page_text": "物流详情页 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 20,
+    "image_indexes": [
+      20
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "物流详情页",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/20"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": []
+    },
+    "inferred_purpose": "承载 物流详情页 的核心业务能力和页面跳转入口。",
+    "main_content": "物流详情页 主内容区域",
+    "layout": {
+      "screen_type": "list",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "物流详情页",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "unknown",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": []
+        }
+      ]
+    },
+    "widgets": [],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [],
+      "primary_actions": []
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "物流详情页 中展示的业务实体"
+      }
+    ],
+    "actions": [],
+    "semantic_keywords": [
+      "物流详情页",
+      "logistics",
+      "第3层",
+      "订单中心",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "物流详情页 logistics 第3层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 3,
+      "parent_page_title": "订单中心",
+      "node_image_rule": "clickable_function_imgs/20[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": true
+    }
+  },
+  {
+    "page_title": "退款售后页",
+    "page_type": "refund",
+    "page_text": "退款售后页 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 21,
+    "image_indexes": [
+      21
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "退款售后页",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/21"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": []
+    },
+    "inferred_purpose": "承载 退款售后页 的核心业务能力和页面跳转入口。",
+    "main_content": "退款售后页 主内容区域",
+    "layout": {
+      "screen_type": "list",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "退款售后页",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "unknown",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": []
+        }
+      ]
+    },
+    "widgets": [],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [],
+      "primary_actions": []
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "退款售后页 中展示的业务实体"
+      }
+    ],
+    "actions": [],
+    "semantic_keywords": [
+      "退款售后页",
+      "refund",
+      "第3层",
+      "订单中心",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "退款售后页 refund 第3层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 3,
+      "parent_page_title": "订单中心",
+      "node_image_rule": "clickable_function_imgs/21[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": true
+    }
+  },
+  {
+    "page_title": "系统通知页",
+    "page_type": "notice",
+    "page_text": "系统通知页 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 22,
+    "image_indexes": [
+      22
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "系统通知页",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/22"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": []
+    },
+    "inferred_purpose": "承载 系统通知页 的核心业务能力和页面跳转入口。",
+    "main_content": "系统通知页 主内容区域",
+    "layout": {
+      "screen_type": "list",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "系统通知页",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "unknown",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": []
+        }
+      ]
+    },
+    "widgets": [],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [],
+      "primary_actions": []
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "系统通知页 中展示的业务实体"
+      }
+    ],
+    "actions": [],
+    "semantic_keywords": [
+      "系统通知页",
+      "notice",
+      "第3层",
+      "消息中心",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "系统通知页 notice 第3层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 3,
+      "parent_page_title": "消息中心",
+      "node_image_rule": "clickable_function_imgs/22[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": true
+    }
+  },
+  {
+    "page_title": "客服会话页",
+    "page_type": "chat",
+    "page_text": "客服会话页 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 23,
+    "image_indexes": [
+      23
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "客服会话页",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/23"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": []
+    },
+    "inferred_purpose": "承载 客服会话页 的核心业务能力和页面跳转入口。",
+    "main_content": "客服会话页 主内容区域",
+    "layout": {
+      "screen_type": "list",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "客服会话页",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "unknown",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": []
+        }
+      ]
+    },
+    "widgets": [],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [],
+      "primary_actions": []
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "客服会话页 中展示的业务实体"
+      }
+    ],
+    "actions": [],
+    "semantic_keywords": [
+      "客服会话页",
+      "chat",
+      "第3层",
+      "消息中心",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "客服会话页 chat 第3层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 3,
+      "parent_page_title": "消息中心",
+      "node_image_rule": "clickable_function_imgs/23[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": true
+    }
+  },
+  {
+    "page_title": "活动消息页",
+    "page_type": "campaign_message",
+    "page_text": "活动消息页 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 24,
+    "image_indexes": [
+      24
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "活动消息页",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/24"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": []
+    },
+    "inferred_purpose": "承载 活动消息页 的核心业务能力和页面跳转入口。",
+    "main_content": "活动消息页 主内容区域",
+    "layout": {
+      "screen_type": "list",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "活动消息页",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "unknown",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": []
+        }
+      ]
+    },
+    "widgets": [],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [],
+      "primary_actions": []
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "活动消息页 中展示的业务实体"
+      }
+    ],
+    "actions": [],
+    "semantic_keywords": [
+      "活动消息页",
+      "campaign_message",
+      "第3层",
+      "消息中心",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "活动消息页 campaign_message 第3层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 3,
+      "parent_page_title": "消息中心",
+      "node_image_rule": "clickable_function_imgs/24[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": true
+    }
+  },
+  {
+    "page_title": "站内信详情页",
+    "page_type": "message_detail",
+    "page_text": "站内信详情页 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 25,
+    "image_indexes": [
+      25
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "站内信详情页",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/25"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": []
+    },
+    "inferred_purpose": "承载 站内信详情页 的核心业务能力和页面跳转入口。",
+    "main_content": "站内信详情页 主内容区域",
+    "layout": {
+      "screen_type": "list",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "站内信详情页",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "unknown",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": []
+        }
+      ]
+    },
+    "widgets": [],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [],
+      "primary_actions": []
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "站内信详情页 中展示的业务实体"
+      }
+    ],
+    "actions": [],
+    "semantic_keywords": [
+      "站内信详情页",
+      "message_detail",
+      "第3层",
+      "消息中心",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "站内信详情页 message_detail 第3层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 3,
+      "parent_page_title": "消息中心",
+      "node_image_rule": "clickable_function_imgs/25[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": true
+    }
+  },
+  {
+    "page_title": "个人资料页",
+    "page_type": "profile_detail",
+    "page_text": "个人资料页 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 26,
+    "image_indexes": [
+      26
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "个人资料页",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/26"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": []
+    },
+    "inferred_purpose": "承载 个人资料页 的核心业务能力和页面跳转入口。",
+    "main_content": "个人资料页 主内容区域",
+    "layout": {
+      "screen_type": "list",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "个人资料页",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "unknown",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": []
+        }
+      ]
+    },
+    "widgets": [],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [],
+      "primary_actions": []
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "个人资料页 中展示的业务实体"
+      }
+    ],
+    "actions": [],
+    "semantic_keywords": [
+      "个人资料页",
+      "profile_detail",
+      "第3层",
+      "我的账户",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "个人资料页 profile_detail 第3层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 3,
+      "parent_page_title": "我的账户",
+      "node_image_rule": "clickable_function_imgs/26[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": true
+    }
+  },
+  {
+    "page_title": "地址管理页",
+    "page_type": "address",
+    "page_text": "地址管理页 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 27,
+    "image_indexes": [
+      27
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "地址管理页",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/27"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": []
+    },
+    "inferred_purpose": "承载 地址管理页 的核心业务能力和页面跳转入口。",
+    "main_content": "地址管理页 主内容区域",
+    "layout": {
+      "screen_type": "list",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "地址管理页",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "unknown",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": []
+        }
+      ]
+    },
+    "widgets": [],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [],
+      "primary_actions": []
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "地址管理页 中展示的业务实体"
+      }
+    ],
+    "actions": [],
+    "semantic_keywords": [
+      "地址管理页",
+      "address",
+      "第3层",
+      "我的账户",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "地址管理页 address 第3层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 3,
+      "parent_page_title": "我的账户",
+      "node_image_rule": "clickable_function_imgs/27[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": true
+    }
+  },
+  {
+    "page_title": "设置页",
+    "page_type": "settings",
+    "page_text": "设置页 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 28,
+    "image_indexes": [
+      28
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "设置页",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/28"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": []
+    },
+    "inferred_purpose": "承载 设置页 的核心业务能力和页面跳转入口。",
+    "main_content": "设置页 主内容区域",
+    "layout": {
+      "screen_type": "list",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "设置页",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "unknown",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": []
+        }
+      ]
+    },
+    "widgets": [],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [],
+      "primary_actions": []
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "设置页 中展示的业务实体"
+      }
+    ],
+    "actions": [],
+    "semantic_keywords": [
+      "设置页",
+      "settings",
+      "第3层",
+      "我的账户",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "设置页 settings 第3层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 3,
+      "parent_page_title": "我的账户",
+      "node_image_rule": "clickable_function_imgs/28[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": true
+    }
+  },
+  {
+    "page_title": "会员中心页",
+    "page_type": "member",
+    "page_text": "会员中心页 页面，用于展示三方应用 APP 页面结构。",
+    "image_index": 29,
+    "image_indexes": [
+      29
+    ],
+    "observed_facts": {
+      "visible_texts": [
+        "会员中心页",
+        "返回",
+        "操作入口"
+      ],
+      "visible_images": [
+        "clickable_function_imgs/29"
+      ],
+      "visible_lists": [
+        "内容列表",
+        "业务卡片"
+      ],
+      "visible_tabs": []
+    },
+    "inferred_purpose": "承载 会员中心页 的核心业务能力和页面跳转入口。",
+    "main_content": "会员中心页 主内容区域",
+    "layout": {
+      "screen_type": "list",
+      "regions": [
+        {
+          "region_name": "top_bar",
+          "description": "顶部标题栏，包含页面标题、返回按钮或搜索入口。",
+          "relative_position": "top",
+          "contains": [
+            "会员中心页",
+            "导航控件"
+          ]
+        },
+        {
+          "region_name": "content_area",
+          "description": "页面主体区域，展示业务内容、卡片、列表或表单。",
+          "relative_position": "middle",
+          "contains": [
+            "业务内容",
+            "可点击组件",
+            "页面截图"
+          ]
+        },
+        {
+          "region_name": "unknown",
+          "description": "底部导航或页面底部操作区域。",
+          "relative_position": "bottom",
+          "contains": []
+        }
+      ]
+    },
+    "widgets": [],
+    "navigation": {
+      "back_available": true,
+      "top_tabs": [],
+      "bottom_tabs": [],
+      "primary_actions": []
+    },
+    "entities": [
+      {
+        "entity_type": "unknown",
+        "description": "会员中心页 中展示的业务实体"
+      }
+    ],
+    "actions": [],
+    "semantic_keywords": [
+      "会员中心页",
+      "member",
+      "第3层",
+      "我的账户",
+      "三方应用",
+      "APP图谱"
+    ],
+    "embedding_text": "会员中心页 member 第3层 三方应用 APP 页面 跳转 演示 按钮 截图",
+    "confidence": 0.92,
+    "demo_meta": {
+      "graph_level": 3,
+      "parent_page_title": "我的账户",
+      "node_image_rule": "clickable_function_imgs/29[无后缀|.png|.jpg|.jpeg|.webp|大写后缀]",
+      "image_dir": "clickable_function_imgs",
+      "is_leaf": true
+    }
+  }
+];
+const EDGES = [
+  {
+    "edge_id": "root__应用首页__widget_0",
+    "from": "root",
+    "to": "应用首页",
+    "label": "进入应用首页",
+    "widget": {
+      "widget_id_hint": "widget_0",
+      "widget_type": "button",
+      "text": "应用首页",
+      "semantic_name": "进入应用首页",
+      "function": "从root进入应用首页",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "应用首页",
+      "widget_image_index": 0,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "root__搜索中心__widget_1",
+    "from": "root",
+    "to": "搜索中心",
+    "label": "进入搜索中心",
+    "widget": {
+      "widget_id_hint": "widget_1",
+      "widget_type": "button",
+      "text": "搜索中心",
+      "semantic_name": "进入搜索中心",
+      "function": "从root进入搜索中心",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "搜索中心",
+      "widget_image_index": 1,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "root__商品频道__widget_2",
+    "from": "root",
+    "to": "商品频道",
+    "label": "进入商品频道",
+    "widget": {
+      "widget_id_hint": "widget_2",
+      "widget_type": "button",
+      "text": "商品频道",
+      "semantic_name": "进入商品频道",
+      "function": "从root进入商品频道",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "商品频道",
+      "widget_image_index": 2,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "root__订单中心__widget_3",
+    "from": "root",
+    "to": "订单中心",
+    "label": "进入订单中心",
+    "widget": {
+      "widget_id_hint": "widget_3",
+      "widget_type": "button",
+      "text": "订单中心",
+      "semantic_name": "进入订单中心",
+      "function": "从root进入订单中心",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "订单中心",
+      "widget_image_index": 3,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "root__消息中心__widget_4",
+    "from": "root",
+    "to": "消息中心",
+    "label": "进入消息中心",
+    "widget": {
+      "widget_id_hint": "widget_4",
+      "widget_type": "button",
+      "text": "消息中心",
+      "semantic_name": "进入消息中心",
+      "function": "从root进入消息中心",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "消息中心",
+      "widget_image_index": 4,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "root__我的账户__widget_5",
+    "from": "root",
+    "to": "我的账户",
+    "label": "进入我的账户",
+    "widget": {
+      "widget_id_hint": "widget_5",
+      "widget_type": "button",
+      "text": "我的账户",
+      "semantic_name": "进入我的账户",
+      "function": "从root进入我的账户",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "我的账户",
+      "widget_image_index": 5,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "应用首页__新人引导页__widget_6",
+    "from": "应用首页",
+    "to": "新人引导页",
+    "label": "进入新人引导页",
+    "widget": {
+      "widget_id_hint": "widget_6",
+      "widget_type": "button",
+      "text": "新人引导页",
+      "semantic_name": "进入新人引导页",
+      "function": "从应用首页进入新人引导页",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "新人引导页",
+      "widget_image_index": 6,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "应用首页__Banner活动页__widget_7",
+    "from": "应用首页",
+    "to": "Banner活动页",
+    "label": "进入Banner活动页",
+    "widget": {
+      "widget_id_hint": "widget_7",
+      "widget_type": "button",
+      "text": "Banner活动页",
+      "semantic_name": "进入Banner活动页",
+      "function": "从应用首页进入Banner活动页",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "Banner活动页",
+      "widget_image_index": 7,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "应用首页__城市选择页__widget_8",
+    "from": "应用首页",
+    "to": "城市选择页",
+    "label": "进入城市选择页",
+    "widget": {
+      "widget_id_hint": "widget_8",
+      "widget_type": "button",
+      "text": "城市选择页",
+      "semantic_name": "进入城市选择页",
+      "function": "从应用首页进入城市选择页",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "城市选择页",
+      "widget_image_index": 8,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "搜索中心__搜索结果页__widget_9",
+    "from": "搜索中心",
+    "to": "搜索结果页",
+    "label": "进入搜索结果页",
+    "widget": {
+      "widget_id_hint": "widget_9",
+      "widget_type": "button",
+      "text": "搜索结果页",
+      "semantic_name": "进入搜索结果页",
+      "function": "从搜索中心进入搜索结果页",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "搜索结果页",
+      "widget_image_index": 9,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "搜索中心__热门搜索页__widget_10",
+    "from": "搜索中心",
+    "to": "热门搜索页",
+    "label": "进入热门搜索页",
+    "widget": {
+      "widget_id_hint": "widget_10",
+      "widget_type": "button",
+      "text": "热门搜索页",
+      "semantic_name": "进入热门搜索页",
+      "function": "从搜索中心进入热门搜索页",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "热门搜索页",
+      "widget_image_index": 10,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "搜索中心__筛选弹窗__widget_11",
+    "from": "搜索中心",
+    "to": "筛选弹窗",
+    "label": "进入筛选弹窗",
+    "widget": {
+      "widget_id_hint": "widget_11",
+      "widget_type": "button",
+      "text": "筛选弹窗",
+      "semantic_name": "进入筛选弹窗",
+      "function": "从搜索中心进入筛选弹窗",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "筛选弹窗",
+      "widget_image_index": 11,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "搜索中心__搜索历史页__widget_12",
+    "from": "搜索中心",
+    "to": "搜索历史页",
+    "label": "进入搜索历史页",
+    "widget": {
+      "widget_id_hint": "widget_12",
+      "widget_type": "button",
+      "text": "搜索历史页",
+      "semantic_name": "进入搜索历史页",
+      "function": "从搜索中心进入搜索历史页",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "搜索历史页",
+      "widget_image_index": 12,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "商品频道__商品详情页__widget_13",
+    "from": "商品频道",
+    "to": "商品详情页",
+    "label": "进入商品详情页",
+    "widget": {
+      "widget_id_hint": "widget_13",
+      "widget_type": "button",
+      "text": "商品详情页",
+      "semantic_name": "进入商品详情页",
+      "function": "从商品频道进入商品详情页",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "商品详情页",
+      "widget_image_index": 13,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "商品频道__商品评价页__widget_14",
+    "from": "商品频道",
+    "to": "商品评价页",
+    "label": "进入商品评价页",
+    "widget": {
+      "widget_id_hint": "widget_14",
+      "widget_type": "button",
+      "text": "商品评价页",
+      "semantic_name": "进入商品评价页",
+      "function": "从商品频道进入商品评价页",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "商品评价页",
+      "widget_image_index": 14,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "商品频道__店铺主页__widget_15",
+    "from": "商品频道",
+    "to": "店铺主页",
+    "label": "进入店铺主页",
+    "widget": {
+      "widget_id_hint": "widget_15",
+      "widget_type": "button",
+      "text": "店铺主页",
+      "semantic_name": "进入店铺主页",
+      "function": "从商品频道进入店铺主页",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "店铺主页",
+      "widget_image_index": 15,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "商品频道__购物车__widget_16",
+    "from": "商品频道",
+    "to": "购物车",
+    "label": "进入购物车",
+    "widget": {
+      "widget_id_hint": "widget_16",
+      "widget_type": "button",
+      "text": "购物车",
+      "semantic_name": "进入购物车",
+      "function": "从商品频道进入购物车",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "购物车",
+      "widget_image_index": 16,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "订单中心__全部订单页__widget_17",
+    "from": "订单中心",
+    "to": "全部订单页",
+    "label": "进入全部订单页",
+    "widget": {
+      "widget_id_hint": "widget_17",
+      "widget_type": "button",
+      "text": "全部订单页",
+      "semantic_name": "进入全部订单页",
+      "function": "从订单中心进入全部订单页",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "全部订单页",
+      "widget_image_index": 17,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "订单中心__待付款页__widget_18",
+    "from": "订单中心",
+    "to": "待付款页",
+    "label": "进入待付款页",
+    "widget": {
+      "widget_id_hint": "widget_18",
+      "widget_type": "button",
+      "text": "待付款页",
+      "semantic_name": "进入待付款页",
+      "function": "从订单中心进入待付款页",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "待付款页",
+      "widget_image_index": 18,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "订单中心__物流详情页__widget_19",
+    "from": "订单中心",
+    "to": "物流详情页",
+    "label": "进入物流详情页",
+    "widget": {
+      "widget_id_hint": "widget_19",
+      "widget_type": "button",
+      "text": "物流详情页",
+      "semantic_name": "进入物流详情页",
+      "function": "从订单中心进入物流详情页",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "物流详情页",
+      "widget_image_index": 19,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "订单中心__退款售后页__widget_20",
+    "from": "订单中心",
+    "to": "退款售后页",
+    "label": "进入退款售后页",
+    "widget": {
+      "widget_id_hint": "widget_20",
+      "widget_type": "button",
+      "text": "退款售后页",
+      "semantic_name": "进入退款售后页",
+      "function": "从订单中心进入退款售后页",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "退款售后页",
+      "widget_image_index": 20,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "消息中心__系统通知页__widget_21",
+    "from": "消息中心",
+    "to": "系统通知页",
+    "label": "进入系统通知页",
+    "widget": {
+      "widget_id_hint": "widget_21",
+      "widget_type": "button",
+      "text": "系统通知页",
+      "semantic_name": "进入系统通知页",
+      "function": "从消息中心进入系统通知页",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "系统通知页",
+      "widget_image_index": 21,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "消息中心__客服会话页__widget_22",
+    "from": "消息中心",
+    "to": "客服会话页",
+    "label": "进入客服会话页",
+    "widget": {
+      "widget_id_hint": "widget_22",
+      "widget_type": "button",
+      "text": "客服会话页",
+      "semantic_name": "进入客服会话页",
+      "function": "从消息中心进入客服会话页",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "客服会话页",
+      "widget_image_index": 22,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "消息中心__活动消息页__widget_23",
+    "from": "消息中心",
+    "to": "活动消息页",
+    "label": "进入活动消息页",
+    "widget": {
+      "widget_id_hint": "widget_23",
+      "widget_type": "button",
+      "text": "活动消息页",
+      "semantic_name": "进入活动消息页",
+      "function": "从消息中心进入活动消息页",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "活动消息页",
+      "widget_image_index": 23,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "消息中心__站内信详情页__widget_24",
+    "from": "消息中心",
+    "to": "站内信详情页",
+    "label": "进入站内信详情页",
+    "widget": {
+      "widget_id_hint": "widget_24",
+      "widget_type": "button",
+      "text": "站内信详情页",
+      "semantic_name": "进入站内信详情页",
+      "function": "从消息中心进入站内信详情页",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "站内信详情页",
+      "widget_image_index": 24,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "我的账户__个人资料页__widget_25",
+    "from": "我的账户",
+    "to": "个人资料页",
+    "label": "进入个人资料页",
+    "widget": {
+      "widget_id_hint": "widget_25",
+      "widget_type": "button",
+      "text": "个人资料页",
+      "semantic_name": "进入个人资料页",
+      "function": "从我的账户进入个人资料页",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "个人资料页",
+      "widget_image_index": 25,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "我的账户__地址管理页__widget_26",
+    "from": "我的账户",
+    "to": "地址管理页",
+    "label": "进入地址管理页",
+    "widget": {
+      "widget_id_hint": "widget_26",
+      "widget_type": "button",
+      "text": "地址管理页",
+      "semantic_name": "进入地址管理页",
+      "function": "从我的账户进入地址管理页",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "地址管理页",
+      "widget_image_index": 26,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "我的账户__设置页__widget_27",
+    "from": "我的账户",
+    "to": "设置页",
+    "label": "进入设置页",
+    "widget": {
+      "widget_id_hint": "widget_27",
+      "widget_type": "button",
+      "text": "设置页",
+      "semantic_name": "进入设置页",
+      "function": "从我的账户进入设置页",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "设置页",
+      "widget_image_index": 27,
+      "confidence": 0.9
+    }
+  },
+  {
+    "edge_id": "我的账户__会员中心页__widget_28",
+    "from": "我的账户",
+    "to": "会员中心页",
+    "label": "进入会员中心页",
+    "widget": {
+      "widget_id_hint": "widget_28",
+      "widget_type": "button",
+      "text": "会员中心页",
+      "semantic_name": "进入会员中心页",
+      "function": "从我的账户进入会员中心页",
+      "relative_position": "middle",
+      "clickable": true,
+      "expected_result": "会员中心页",
+      "widget_image_index": 28,
+      "confidence": 0.9
+    }
+  }
+];
+
+const pageMap = new Map(APP_PAGES.map(page => [page.page_title, page]));
+const childrenMap = new Map();
+EDGES.forEach(edge => {
+  if (!childrenMap.has(edge.from)) childrenMap.set(edge.from, []);
+  childrenMap.get(edge.from).push(edge);
+});
+
+function buildCandidatePaths(dir, index) {
+  return IMG_EXTS.map(ext => `${dir}${index}${ext}`);
+}
+
+function placeholderSvg(title) {
+  const safeText = String(title || "image missing").slice(0, 16);
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="180" height="120" viewBox="0 0 180 120">
+      <rect width="180" height="120" rx="14" fill="#eef2ff"/>
+      <rect x="18" y="20" width="144" height="80" rx="10" fill="#ffffff" stroke="#94a3b8" stroke-width="2"/>
+      <text x="90" y="56" font-family="Arial" font-size="13" font-weight="700" text-anchor="middle" fill="#475569">${safeText}</text>
+      <text x="90" y="76" font-family="Arial" font-size="11" text-anchor="middle" fill="#64748b">图片未找到</text>
+    </svg>`;
+  return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
+}
+
+function setImageWithFallback(img, candidates, title) {
+  let cursor = 0;
+  img.onerror = function () {
+    cursor += 1;
+    if (cursor < candidates.length) {
+      this.src = candidates[cursor];
+    } else {
+      this.onerror = null;
+      this.src = placeholderSvg(title);
+    }
+  };
+  img.src = candidates[0] || placeholderSvg(title);
+}
+
+function getNodeImageCandidates(page) {
+  const indexes = page.image_indexes && page.image_indexes.length ? page.image_indexes : [page.image_index];
+  return indexes.slice(0, 3).map(index => buildCandidatePaths(NODE_IMG_DIR, index));
+}
+
+function getOutgoingEdges(title) {
+  return childrenMap.get(title) || [];
+}
+
+function createEdgeLabel(edge, rootEdge = false) {
+  const label = document.createElement("div");
+  label.className = rootEdge ? "edge-label root-edge" : "edge-label";
+  label.dataset.edgeId = edge.edge_id;
+
+  const edgeImg = document.createElement("img");
+  setImageWithFallback(edgeImg, buildCandidatePaths(WIDGET_IMG_DIR, edge.widget.widget_image_index), edge.label);
+  edgeImg.alt = edge.label;
+
+  const edgeText = document.createElement("div");
+  edgeText.className = "edge-text";
+  edgeText.innerHTML = `
+    <div class="edge-name">${edge.label}</div>
+    <div class="edge-sub">widget ${edge.widget.widget_image_index} · ${edge.from} → ${edge.to}</div>
+  `;
+
+  label.appendChild(edgeImg);
+  label.appendChild(edgeText);
+  label.addEventListener("click", event => {
+    event.stopPropagation();
+    selectEdge(edge);
+  });
+  return label;
+}
+
+function createNodeCard(page, level) {
+  const card = document.createElement("div");
+  card.className = `node-card level-${level}`;
+  card.dataset.title = page.page_title;
+  card.dataset.search = JSON.stringify(page).toLowerCase();
+  card.id = `node-${encodeURIComponent(page.page_title)}`;
+
+  const thumb = document.createElement("img");
+  thumb.className = "thumb";
+  setImageWithFallback(thumb, buildCandidatePaths(NODE_IMG_DIR, page.image_index), page.page_title);
+  thumb.alt = page.page_title;
+  card.appendChild(thumb);
+
+  const title = document.createElement("div");
+  title.className = "node-title";
+  title.textContent = page.page_title;
+  card.appendChild(title);
+
+  const type = document.createElement("div");
+  type.className = "node-type";
+  type.textContent = `${page.page_type} · 图 ${page.image_index}`;
+  card.appendChild(type);
+
+  const meta = document.createElement("div");
+  meta.className = "node-meta";
+  meta.innerHTML = `<span class="mini">L${level}</span><span class="mini">${getOutgoingEdges(page.page_title).length} 出边</span>`;
+  card.appendChild(meta);
+
+  card.addEventListener("click", event => {
+    event.stopPropagation();
+    selectNode(page.page_title, true);
+  });
+  card.addEventListener("mouseenter", event => showPreview(page, event));
+  card.addEventListener("mousemove", event => movePreview(event));
+  card.addEventListener("mouseleave", hidePreview);
+  return card;
+}
+
+function renderGraph() {
+  const graphRoot = document.getElementById("graphRoot");
+  graphRoot.innerHTML = "";
+
+  const rootPage = pageMap.get("root");
+  const rootCol = document.createElement("div");
+  rootCol.className = "root-col";
+  rootCol.appendChild(createNodeCard(rootPage, 1));
+  graphRoot.appendChild(rootCol);
+
+  const bus = document.createElement("div");
+  bus.className = "root-bus";
+  graphRoot.appendChild(bus);
+
+  const branchesCol = document.createElement("div");
+  branchesCol.className = "branches-col";
+
+  getOutgoingEdges("root").forEach(rootEdge => {
+    const parentPage = pageMap.get(rootEdge.to);
+    if (!parentPage) return;
+
+    const branch = document.createElement("div");
+    branch.className = "branch";
+
+    const parentWrap = document.createElement("div");
+    parentWrap.className = "parent-wrap";
+    parentWrap.appendChild(createEdgeLabel(rootEdge, true));
+    parentWrap.appendChild(createNodeCard(parentPage, 2));
+
+    const children = document.createElement("div");
+    children.className = "children";
+
+    getOutgoingEdges(parentPage.page_title).forEach(childEdge => {
+      const childPage = pageMap.get(childEdge.to);
+      if (!childPage) return;
+
+      const childWrap = document.createElement("div");
+      childWrap.className = "child-wrap";
+      childWrap.appendChild(createEdgeLabel(childEdge));
+      childWrap.appendChild(createNodeCard(childPage, 3));
+      children.appendChild(childWrap);
+    });
+
+    branch.appendChild(parentWrap);
+    branch.appendChild(children);
+    branchesCol.appendChild(branch);
+  });
+
+  graphRoot.appendChild(branchesCol);
+}
+
+function renderNav() {
+  const treeNav = document.getElementById("treeNav");
+  treeNav.innerHTML = "";
+
+  function buildNavNode(title) {
+    const page = pageMap.get(title);
+    const outgoing = getOutgoingEdges(title);
+    const node = document.createElement("div");
+    node.className = "nav-node";
+    node.dataset.title = title;
+
+    const row = document.createElement("div");
+    row.className = "nav-row";
+    row.dataset.title = title;
+
+    const toggle = document.createElement("button");
+    toggle.className = outgoing.length ? "toggle" : "toggle leaf";
+    toggle.textContent = outgoing.length ? "−" : "·";
+    toggle.type = "button";
+    toggle.addEventListener("click", event => {
+      event.stopPropagation();
+      if (!outgoing.length) return;
+      node.classList.toggle("collapsed");
+      toggle.textContent = node.classList.contains("collapsed") ? "+" : "−";
+    });
+
+    const name = document.createElement("div");
+    name.className = "nav-name";
+    name.textContent = title;
+
+    const count = document.createElement("div");
+    count.className = "nav-count";
+    count.textContent = page ? `L${page.demo_meta.graph_level}` : "";
+
+    row.appendChild(toggle);
+    row.appendChild(name);
+    row.appendChild(count);
+    row.addEventListener("click", () => selectNode(title, true));
+    node.appendChild(row);
+
+    if (outgoing.length) {
+      const children = document.createElement("div");
+      children.className = "nav-children";
+      outgoing.forEach(edge => children.appendChild(buildNavNode(edge.to)));
+      node.appendChild(children);
+    }
+    return node;
+  }
+
+  treeNav.appendChild(buildNavNode("root"));
+}
+
+function selectNode(title, scrollIntoView = false) {
+  document.querySelectorAll(".edge-label").forEach(el => el.classList.remove("selected-edge"));
+  document.querySelectorAll(".node-card").forEach(el => el.classList.toggle("selected", el.dataset.title === title));
+  document.querySelectorAll(".nav-row").forEach(el => el.classList.toggle("active", el.dataset.title === title));
+
+  const card = document.getElementById(`node-${encodeURIComponent(title)}`);
+  if (scrollIntoView && card) card.scrollIntoView({ behavior:"smooth", block:"center", inline:"center" });
+
+  const page = pageMap.get(title);
+  if (!page) return;
+  const outgoing = getOutgoingEdges(title);
+
+  document.getElementById("detailTitle").textContent = page.page_title;
+  document.getElementById("summaryPanel").innerHTML = `
+    <div class="summary-row"><span>page_title</span><span>${page.page_title}</span></div>
+    <div class="summary-row"><span>层级</span><span>第 ${page.demo_meta.graph_level} 层</span></div>
+    <div class="summary-row"><span>页面类型</span><span>${page.page_type}</span></div>
+    <div class="summary-row"><span>父节点</span><span>${page.demo_meta.parent_page_title || "-"}</span></div>
+    <div class="summary-row"><span>节点图片序号</span><span>${page.image_indexes.join(", ")}</span></div>
+    <div class="summary-row"><span>出边数量</span><span>${outgoing.length}</span></div>
+  `;
+
+  const strip = document.getElementById("imageStrip");
+  strip.innerHTML = "";
+  getNodeImageCandidates(page).forEach((candidates, idx) => {
+    const img = document.createElement("img");
+    setImageWithFallback(img, candidates, `${page.page_title}-${idx + 1}`);
+    img.alt = page.page_title;
+    strip.appendChild(img);
+  });
+
+  const payload = {
+    node_key: page.page_title,
+    page_title: page.page_title,
+    graph_level: page.demo_meta.graph_level,
+    parent_page_title: page.demo_meta.parent_page_title,
+    node_image_indexes: page.image_indexes,
+    node_image_candidate_paths: getNodeImageCandidates(page),
+    outgoing_edges: outgoing.map(edge => ({
+      edge_id: edge.edge_id,
+      from: edge.from,
+      to: edge.to,
+      label: edge.label,
+      widget_image_index: edge.widget.widget_image_index,
+      widget_image_candidate_paths: buildCandidatePaths(WIDGET_IMG_DIR, edge.widget.widget_image_index),
+      widget: edge.widget
+    })),
+    raw_data: page
+  };
+
+  document.getElementById("jsonPanel").textContent = JSON.stringify(payload, null, 2);
+}
+
+function selectEdge(edge) {
+  document.querySelectorAll(".node-card").forEach(el => el.classList.remove("selected"));
+  document.querySelectorAll(".nav-row").forEach(el => el.classList.remove("active"));
+  document.querySelectorAll(".edge-label").forEach(el => el.classList.toggle("selected-edge", el.dataset.edgeId === edge.edge_id));
+
+  const fromPage = pageMap.get(edge.from);
+  const toPage = pageMap.get(edge.to);
+  document.getElementById("detailTitle").textContent = `边：${edge.from} → ${edge.to}`;
+  document.getElementById("summaryPanel").innerHTML = `
+    <div class="summary-row"><span>边关系</span><span>${edge.from} → ${edge.to}</span></div>
+    <div class="summary-row"><span>按钮语义</span><span>${edge.label}</span></div>
+    <div class="summary-row"><span>widget 序号</span><span>${edge.widget.widget_image_index}</span></div>
+    <div class="summary-row"><span>widget 类型</span><span>${edge.widget.widget_type}</span></div>
+    <div class="summary-row"><span>预期结果</span><span>${edge.widget.expected_result}</span></div>
+    <div class="summary-row"><span>置信度</span><span>${edge.widget.confidence}</span></div>
+  `;
+
+  const strip = document.getElementById("imageStrip");
+  strip.innerHTML = "";
+
+  const widgetImg = document.createElement("img");
+  setImageWithFallback(widgetImg, buildCandidatePaths(WIDGET_IMG_DIR, edge.widget.widget_image_index), edge.label);
+  widgetImg.alt = edge.label;
+  strip.appendChild(widgetImg);
+
+  [fromPage, toPage].forEach(page => {
+    if (!page) return;
+    const img = document.createElement("img");
+    setImageWithFallback(img, buildCandidatePaths(NODE_IMG_DIR, page.image_index), page.page_title);
+    img.alt = page.page_title;
+    strip.appendChild(img);
+  });
+
+  const payload = {
+    edge_key: edge.edge_id,
+    from_page_title: edge.from,
+    to_page_title: edge.to,
+    edge_label: edge.label,
+    widget_image_index: edge.widget.widget_image_index,
+    widget_image_candidate_paths: buildCandidatePaths(WIDGET_IMG_DIR, edge.widget.widget_image_index),
+    from_node_image_index: fromPage ? fromPage.image_index : null,
+    to_node_image_index: toPage ? toPage.image_index : null,
+    widget: edge.widget,
+    from_page: fromPage,
+    to_page: toPage
+  };
+
+  document.getElementById("jsonPanel").textContent = JSON.stringify(payload, null, 2);
+}
+
+const preview = document.getElementById("preview");
+const previewTitle = document.getElementById("previewTitle");
+const previewImgs = document.getElementById("previewImgs");
+
+function showPreview(page, event) {
+  const groups = getNodeImageCandidates(page);
+  previewTitle.textContent = `${page.page_title} · 节点图序号 ${page.image_indexes.join(", ")}`;
+  previewImgs.innerHTML = "";
+  groups.forEach((candidates, idx) => {
+    const img = document.createElement("img");
+    setImageWithFallback(img, candidates, `${page.page_title}-${idx + 1}`);
+    img.alt = page.page_title;
+    previewImgs.appendChild(img);
+  });
+  preview.style.display = "block";
+  movePreview(event);
+}
+
+function movePreview(event) {
+  const offset = 18;
+  const rect = preview.getBoundingClientRect();
+  let left = event.clientX + offset;
+  let top = event.clientY + offset;
+  if (left + rect.width > window.innerWidth) left = event.clientX - rect.width - offset;
+  if (top + rect.height > window.innerHeight) top = event.clientY - rect.height - offset;
+  preview.style.left = `${Math.max(8, left)}px`;
+  preview.style.top = `${Math.max(8, top)}px`;
+}
+
+function hidePreview() {
+  preview.style.display = "none";
+}
+
+document.getElementById("searchInput").addEventListener("input", event => {
+  const keyword = event.target.value.trim().toLowerCase();
+  document.querySelectorAll(".node-card").forEach(card => {
+    const matched = !keyword || card.dataset.search.includes(keyword) || card.dataset.title.toLowerCase().includes(keyword);
+    card.classList.toggle("hidden", !matched);
+  });
+  document.querySelectorAll(".nav-row").forEach(row => {
+    const title = row.dataset.title || "";
+    const page = pageMap.get(title);
+    const matched = !keyword || title.toLowerCase().includes(keyword) || JSON.stringify(page || {}).toLowerCase().includes(keyword);
+    row.style.opacity = matched ? "1" : "0.35";
+  });
+});
+
+renderGraph();
+renderNav();
+selectNode("root", false);
+</script>
+</body>
+</html>

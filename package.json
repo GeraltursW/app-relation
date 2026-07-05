@@ -1,0 +1,8 @@
+{
+  "name": "app-page-graph-demo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "check": "node --check src/data.js && node --check src/app.js"
+  }
+}
