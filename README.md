@@ -35,6 +35,7 @@
 - `src/data/graph.js`：页面节点与跳转关系数据。
 - `src/utils/images.js`：图片候选路径和占位图逻辑。
 - `docs/backend-data-model.md`：后端数据库字段、Page Hash 和向量库落地指导。
+- `docs/page-deduplication-flow.md`：截图入库校验、动态内容页面去重和 canonical page 归并流程。
 
 ## 使用方式
 

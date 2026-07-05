@@ -1,6 +1,8 @@
 <script setup>
 import { computed, ref } from "vue";
 import TreeItem from "./TreeItem.vue";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { appPages, getOutgoingEdges, pageMap } from "../data/graph.js";
 
 const props = defineProps({
@@ -52,12 +54,15 @@ function isMuted(node) {
 <template>
   <aside class="sidebar">
     <div class="panel-head">
-      <p class="eyebrow">Navigation</p>
-      <h2>页面层级</h2>
+      <div>
+        <p class="eyebrow">Navigation</p>
+        <h2>页面层级</h2>
+      </div>
+      <span class="panel-chip">Graph</span>
     </div>
 
     <div class="search-box">
-      <input
+      <Input
         :value="keyword"
         type="search"
         placeholder="搜索页面、入口、组件序号"
@@ -77,15 +82,17 @@ function isMuted(node) {
       </button>
     </div>
 
-    <nav class="tree-nav" aria-label="页面树">
-      <TreeItem
-        :node="tree"
-        :collapsed="collapsed"
-        :selected="selected"
-        :is-muted="isMuted"
-        @toggle="toggle"
-        @select-node="emit('select-node', $event)"
-      />
-    </nav>
+    <ScrollArea class="tree-scroll">
+      <nav class="tree-nav" aria-label="页面树">
+        <TreeItem
+          :node="tree"
+          :collapsed="collapsed"
+          :selected="selected"
+          :is-muted="isMuted"
+          @toggle="toggle"
+          @select-node="emit('select-node', $event)"
+        />
+      </nav>
+    </ScrollArea>
   </aside>
 </template>

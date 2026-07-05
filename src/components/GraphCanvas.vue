@@ -25,6 +25,10 @@ const props = defineProps({
   layoutRevision: {
     type: Number,
     default: 0
+  },
+  replayAnalysis: {
+    type: Object,
+    default: null
   }
 });
 
@@ -43,6 +47,9 @@ const NODE_BOX = {
 };
 
 const normalizedKeyword = computed(() => props.keyword.trim().toLowerCase());
+const replayNodeSet = computed(() => new Set(props.replayAnalysis?.highlightedNodeIds || []));
+const replayPrimaryNodeSet = computed(() => new Set(props.replayAnalysis?.primaryNodeIds || []));
+const replayEdgeSet = computed(() => new Set(props.replayAnalysis?.highlightedEdgeIds || []));
 
 const visibleTitles = computed(() => {
   const titles = new Set(["root"]);
@@ -182,6 +189,8 @@ const nodes = computed(() => {
     .map((page) => {
       const outgoingCount = getOutgoingEdges(page.title).length;
       const isMatched = !normalizedKeyword.value || JSON.stringify(page).toLowerCase().includes(normalizedKeyword.value);
+      const replayHit = replayNodeSet.value.has(page.title);
+      const replayPrimary = replayPrimaryNodeSet.value.has(page.title);
 
       return {
         id: page.title,
@@ -196,6 +205,9 @@ const nodes = computed(() => {
           collapsed: collapsed.value.has(page.title),
           dimmed: !isMatched,
           selected: props.selected.type === "node" && props.selected.id === page.title,
+          replayHit,
+          replayPrimary,
+          replayDimmed: Boolean(props.replayAnalysis) && !replayHit,
           layoutMode: props.layoutMode,
           category: getPageCategory(page),
           onToggle: () => toggleCollapse(page.title),
@@ -208,24 +220,30 @@ const nodes = computed(() => {
 const edges = computed(() => {
   return appEdges
     .filter((edge) => visibleTitles.value.has(edge.from) && visibleTitles.value.has(edge.to))
-    .map((edge) => ({
-      id: edge.id,
-      source: edge.from,
-      target: edge.to,
-      sourceHandle: "source",
-      targetHandle: "target",
-      label: edge.label,
-      type: props.layoutMode === "radial" ? "default" : "smoothstep",
-      animated: props.selected.type === "edge" && props.selected.id === edge.id,
-      markerEnd: MarkerType.ArrowClosed,
-      style: {
-        stroke: props.selected.type === "edge" && props.selected.id === edge.id ? "#2563eb" : "#5f738d",
-        strokeWidth: props.selected.type === "edge" && props.selected.id === edge.id ? 4 : 3
-      },
-      labelBgStyle: { fill: "#ffffff", fillOpacity: 0.94 },
-      labelStyle: { fill: "#334155", fontSize: 12, fontWeight: 700 },
-      data: edge
-    }));
+    .map((edge) => {
+      const replayEdge = replayEdgeSet.value.has(edge.id);
+      const selectedEdge = props.selected.type === "edge" && props.selected.id === edge.id;
+      return {
+        id: edge.id,
+        source: edge.from,
+        target: edge.to,
+        sourceHandle: "source",
+        targetHandle: "target",
+        label: edge.label,
+        type: props.layoutMode === "radial" ? "default" : "smoothstep",
+        animated: selectedEdge || replayEdge,
+        markerEnd: MarkerType.ArrowClosed,
+        class: replayEdge ? "replay-edge" : "",
+        style: {
+          stroke: replayEdge ? "#0ea5e9" : selectedEdge ? "#1769e0" : "#5b8dc9",
+          strokeWidth: replayEdge || selectedEdge ? 4 : 3,
+          opacity: props.replayAnalysis && !replayEdge ? 0.22 : 1
+        },
+        labelBgStyle: { fill: "#ffffff", fillOpacity: replayEdge ? 1 : 0.94 },
+        labelStyle: { fill: replayEdge ? "#0369a1" : "#334155", fontSize: 12, fontWeight: 700 },
+        data: edge
+      };
+    });
 });
 
 function toggleCollapse(title) {

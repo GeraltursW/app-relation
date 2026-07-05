@@ -2,6 +2,7 @@
 import { Handle, Position } from "@vue-flow/core";
 import { computed } from "vue";
 import SmartImage from "../shared/SmartImage.vue";
+import { Badge } from "@/components/ui/badge";
 import { nodeImagePaths } from "../../utils/images.js";
 
 const props = defineProps({
@@ -25,7 +26,15 @@ const sourcePosition = computed(() => {
 <template>
   <div
     class="app-node"
-    :class="[`level-${data.level}`, { selected: data.selected, dimmed: data.dimmed }]"
+    :class="[
+      `level-${data.level}`,
+      {
+        selected: data.selected,
+        dimmed: data.dimmed || data.replayDimmed,
+        'replay-hit': data.replayHit,
+        'replay-primary': data.replayPrimary
+      }
+    ]"
     @click.stop="data.onSelect"
   >
     <Handle id="target" type="target" :position="targetPosition" />
@@ -42,9 +51,12 @@ const sourcePosition = computed(() => {
       </button>
     </div>
 
-    <span class="node-category" :class="`tone-${data.category.tone}`">
+    <Badge class="node-category" :class="`tone-${data.category.tone}`">
       {{ data.category.label }}
-    </span>
+    </Badge>
+
+    <Badge v-if="data.replayPrimary" class="replay-badge">候选路径</Badge>
+    <Badge v-else-if="data.replayHit" class="replay-badge soft">URL 命中</Badge>
 
     <SmartImage
       class="node-thumb"
