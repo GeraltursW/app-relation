@@ -44,3 +44,4 @@ function handleError() {
 <template>
   <img :src="src" :alt="title" draggable="false" @error="handleError" />
 </template>
+

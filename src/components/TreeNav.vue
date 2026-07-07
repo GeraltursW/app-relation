@@ -1,11 +1,16 @@
 <script setup>
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import TreeItem from "./TreeItem.vue";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { appPages, getOutgoingEdges, pageMap } from "../data/graph.js";
+import { getOutgoingEdges } from "../data/graph.js";
 
 const props = defineProps({
+  graph: {
+    type: Object,
+    required: true
+  },
   keyword: {
     type: String,
     default: ""
@@ -13,41 +18,63 @@ const props = defineProps({
   selected: {
     type: Object,
     required: true
+  },
+  loading: {
+    type: Boolean,
+    default: false
   }
 });
 
 const emit = defineEmits(["update:keyword", "select-node"]);
 const collapsed = ref(new Set());
 
-const tree = computed(() => buildNode("root"));
+const tree = computed(() => props.graph.roots.map((rootId) => buildNode(rootId)));
+const floatingTree = computed(() => props.graph.floatingRoots.map((rootId) => buildNode(rootId)));
 const searchResults = computed(() => {
   const normalized = props.keyword.trim().toLowerCase();
   if (!normalized) return [];
-  return appPages
-    .filter((page) => JSON.stringify(page).toLowerCase().includes(normalized))
-    .slice(0, 8);
+  return props.graph.pages
+    .filter((page) => searchableText(page).includes(normalized))
+    .slice(0, 12);
 });
 
-function buildNode(title) {
-  const page = pageMap.get(title);
+watch(() => props.graph, () => {
+  collapsed.value = new Set();
+});
+
+function buildNode(nodeId) {
+  const page = props.graph.pageMap.get(nodeId);
   return {
-    title,
+    id: nodeId,
     page,
-    children: getOutgoingEdges(title).map((edge) => buildNode(edge.to))
+    children: getOutgoingEdges(props.graph, nodeId).map((edge) => buildNode(edge.to))
   };
 }
 
-function toggle(title) {
+function toggle(nodeId) {
   const next = new Set(collapsed.value);
-  if (next.has(title)) next.delete(title);
-  else next.add(title);
+  if (next.has(nodeId)) next.delete(nodeId);
+  else next.add(nodeId);
   collapsed.value = next;
 }
 
 function isMuted(node) {
   const normalized = props.keyword.trim().toLowerCase();
   if (!normalized) return false;
-  return !JSON.stringify(node.page || {}).toLowerCase().includes(normalized);
+  return !searchableText(node.page).includes(normalized);
+}
+
+function searchableText(page) {
+  if (!page) return "";
+  return [
+    page.page_title,
+    page.displayTitle,
+    page.page_text,
+    page.page_url,
+    page.aiInference?.label,
+    page.aiInference?.reason,
+    JSON.stringify(page.page_info || {})
+  ].join(" ").toLowerCase();
 }
 </script>
 
@@ -65,7 +92,7 @@ function isMuted(node) {
       <Input
         :value="keyword"
         type="search"
-        placeholder="搜索页面、入口、组件序号"
+        placeholder="搜索页面、URL、AI 文本"
         @input="emit('update:keyword', $event.target.value)"
       />
     </div>
@@ -73,26 +100,63 @@ function isMuted(node) {
     <div v-if="searchResults.length" class="search-results">
       <button
         v-for="page in searchResults"
-        :key="page.title"
+        :key="page.nodeId"
         type="button"
-        @click="emit('select-node', page.title)"
+        @click="emit('select-node', page.nodeId)"
       >
-        <strong>{{ page.title }}</strong>
-        <span>{{ page.type }} · 图 {{ page.imageIndex }}</span>
+        <strong>{{ page.displayTitle }}</strong>
+        <span>{{ page.page_url || "no url" }}</span>
       </button>
     </div>
 
-    <ScrollArea class="tree-scroll">
-      <nav class="tree-nav" aria-label="页面树">
-        <TreeItem
-          :node="tree"
-          :collapsed="collapsed"
-          :selected="selected"
-          :is-muted="isMuted"
-          @toggle="toggle"
-          @select-node="emit('select-node', $event)"
-        />
-      </nav>
-    </ScrollArea>
+    <section class="sidebar-section main-tree-section">
+      <div class="sidebar-section-head">
+        <strong>主图谱树</strong>
+        <Badge variant="secondary">{{ graph.roots.length }}</Badge>
+      </div>
+      <ScrollArea class="tree-scroll module-scroll">
+        <div v-if="loading" class="empty-state">图谱加载中...</div>
+        <div v-else-if="!tree.length" class="empty-state">暂无主树数据</div>
+        <nav v-else class="tree-nav" aria-label="主图谱树">
+          <TreeItem
+            v-for="node in tree"
+            :key="node.id"
+            :node="node"
+            :collapsed="collapsed"
+            :selected="selected"
+            :is-muted="isMuted"
+            @toggle="toggle"
+            @select-node="emit('select-node', $event)"
+          />
+        </nav>
+      </ScrollArea>
+    </section>
+
+    <section class="sidebar-section floating-section">
+      <div class="sidebar-section-head">
+        <strong>游离 URL 页面</strong>
+        <Badge variant="secondary">{{ graph.floatingPages.length }}</Badge>
+      </div>
+      <ScrollArea class="floating-scroll module-scroll">
+        <div v-if="loading" class="empty-state">等待图谱数据...</div>
+        <div v-else-if="!floatingTree.length" class="empty-state">暂无游离页面</div>
+        <div v-else class="floating-list">
+          <button
+            v-for="node in floatingTree"
+            :key="node.id"
+            class="floating-page-card"
+            :class="{ active: selected.type === 'node' && selected.id === node.id, muted: isMuted(node) }"
+            type="button"
+            @click="emit('select-node', node.id)"
+          >
+            <span>{{ node.page.displayTitle }}</span>
+            <strong>{{ node.page.aiInference.label }}</strong>
+            <em>{{ node.page.aiInference.reason }}</em>
+            <small>{{ node.page.page_url || "no page url" }}</small>
+          </button>
+        </div>
+      </ScrollArea>
+    </section>
   </aside>
 </template>
+

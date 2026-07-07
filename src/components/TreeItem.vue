@@ -1,6 +1,5 @@
 <script setup>
 import { computed } from "vue";
-import { getGraphLevel } from "../data/graph.js";
 
 const props = defineProps({
   node: {
@@ -24,9 +23,9 @@ const props = defineProps({
 const emit = defineEmits(["toggle", "select-node"]);
 
 const hasChildren = computed(() => props.node.children.length > 0);
-const isCollapsed = computed(() => props.collapsed.has(props.node.title));
-const isActive = computed(() => props.selected.type === "node" && props.selected.id === props.node.title);
-const level = computed(() => getGraphLevel(props.node.title));
+const isCollapsed = computed(() => props.collapsed.has(props.node.id));
+const isActive = computed(() => props.selected.type === "node" && props.selected.id === props.node.id);
+const page = computed(() => props.node.page || {});
 </script>
 
 <template>
@@ -35,19 +34,19 @@ const level = computed(() => getGraphLevel(props.node.title));
       class="nav-row"
       :class="{ active: isActive, muted: isMuted(node) }"
       type="button"
-      @click="emit('select-node', node.title)"
+      @click="emit('select-node', node.id)"
     >
-      <span class="toggle" @click.stop="hasChildren && emit('toggle', node.title)">
+      <span class="toggle" @click.stop="hasChildren && emit('toggle', node.id)">
         {{ hasChildren ? (isCollapsed ? "+" : "-") : "" }}
       </span>
-      <span class="nav-name">{{ node.title }}</span>
-      <span class="nav-count">L{{ level }}</span>
+      <span class="nav-name">{{ page.displayTitle || page.page_title }}</span>
+      <span class="nav-count">L{{ page.level || 1 }}</span>
     </button>
 
     <div v-if="hasChildren && !isCollapsed" class="nav-children">
       <TreeItem
         v-for="child in node.children"
-        :key="child.title"
+        :key="child.id"
         :node="child"
         :collapsed="collapsed"
         :selected="selected"
@@ -58,3 +57,4 @@ const level = computed(() => getGraphLevel(props.node.title));
     </div>
   </div>
 </template>
+

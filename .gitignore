@@ -3,3 +3,17 @@ dist/
 .DS_Store
 *.log
 *.tmp
+.env
+backend/.env
+__pycache__/
+*.py[cod]
+backend/.venv/
+backend/inbox/*
+backend/storage/*
+!backend/inbox/.gitkeep
+!backend/storage/.gitkeep
+backend/direct_init.py
+backend/insert_mock.py
+backend/killpids.py
+backend/setup_db.py
+kill8000.bat
