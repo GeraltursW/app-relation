@@ -20,10 +20,10 @@ class GraphEdge(BaseModel):
     label: str
     action_type: str
     confidence: float | None = None
+    widget_description: str | None = None
 
 
 class AppGraphResponse(BaseModel):
     app_id: UUID
     nodes: list[GraphNode]
     edges: list[GraphEdge]
-

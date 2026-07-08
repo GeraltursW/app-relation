@@ -39,7 +39,10 @@ const page = computed(() => props.node.page || {});
       <span class="toggle" @click.stop="hasChildren && emit('toggle', node.id)">
         {{ hasChildren ? (isCollapsed ? "+" : "-") : "" }}
       </span>
-      <span class="nav-name">{{ page.displayTitle || page.page_title }}</span>
+      <span class="nav-name">
+        <span v-if="page.ai_recursive" class="tree-robot" title="AI 探索页面">🤖</span>
+        {{ page.displayTitle || page.page_title }}
+      </span>
       <span class="nav-count">L{{ page.level || 1 }}</span>
     </button>
 
@@ -57,4 +60,3 @@ const page = computed(() => props.node.page || {});
     </div>
   </div>
 </template>
-

@@ -29,10 +29,14 @@ const props = defineProps({
   layoutRevision: {
     type: Number,
     default: 0
+  },
+  compactMode: {
+    type: Boolean,
+    default: false
   }
 });
 
-const emit = defineEmits(["select-node", "select-edge"]);
+const emit = defineEmits(["select-node", "select-edge", "toggle-compact-mode"]);
 const collapsed = ref(new Set());
 const graphArea = ref(null);
 const { fitView, setCenter } = useVueFlow();
@@ -50,6 +54,10 @@ const rootIds = computed(() => [...props.graph.roots, ...props.graph.floatingRoo
 
 const visibleIds = computed(() => {
   const ids = new Set();
+  if (props.layoutMode === "radial") {
+    props.graph.pages.forEach((page) => ids.add(page.nodeId));
+    return ids;
+  }
   function visit(nodeId) {
     ids.add(nodeId);
     if (collapsed.value.has(nodeId)) return;
@@ -84,6 +92,7 @@ const nodes = computed(() => props.graph.pages
         dimmed: !matched,
         selected: props.selected.type === "node" && props.selected.id === page.nodeId,
         layoutMode: props.layoutMode,
+        compactMode: props.compactMode,
         category: getPageCategory(page),
         floating: page.isFloating,
         onToggle: () => toggleCollapse(page.nodeId),
@@ -161,18 +170,21 @@ function buildVerticalLayout() {
 }
 
 function buildRadialLayout() {
+  const centerX = 900;
+  const centerY = 620;
   const simulationNodes = props.graph.pages
     .filter((page) => visibleIds.value.has(page.nodeId))
     .map((page, index) => {
       const angle = -Math.PI / 2 + (index / Math.max(1, visibleIds.value.size)) * Math.PI * 2;
-      const radius = page.level <= 1 ? 0 : Math.min(960, 280 + page.level * 135);
+      const radius = page.level <= 1 ? 0 : Math.min(1500, 360 + page.level * 240);
+      const isRoot = props.graph.roots.includes(page.nodeId);
       return {
         id: page.nodeId,
         level: page.level,
-        x: 680 + Math.cos(angle) * radius,
-        y: 460 + Math.sin(angle) * radius,
-        fx: props.graph.roots.includes(page.nodeId) ? 680 : null,
-        fy: props.graph.roots.includes(page.nodeId) ? 460 : null
+        x: centerX + Math.cos(angle) * radius,
+        y: centerY + Math.sin(angle) * radius,
+        fx: isRoot ? centerX : null,
+        fy: isRoot ? centerY : null
       };
     });
   const links = props.graph.edges
@@ -180,13 +192,17 @@ function buildRadialLayout() {
     .map((edge) => ({ source: edge.from, target: edge.to }));
 
   const simulation = forceSimulation(simulationNodes)
-    .force("link", forceLink(links).id((node) => node.id).distance(310).strength(0.78))
-    .force("charge", forceManyBody().strength(-1350))
-    .force("collide", forceCollide().radius(170).strength(1))
-    .force("center", forceCenter(680, 460))
+    .force("link", forceLink(links).id((node) => node.id).distance((link) => {
+      const sourceLevel = link.source?.level || 1;
+      const targetLevel = link.target?.level || 1;
+      return 430 + Math.max(sourceLevel, targetLevel) * 54;
+    }).strength(0.34))
+    .force("charge", forceManyBody().strength(-4200).distanceMin(180).distanceMax(1800))
+    .force("collide", forceCollide().radius((node) => (node.level <= 2 ? 240 : 220)).strength(1))
+    .force("center", forceCenter(centerX, centerY))
     .stop();
 
-  for (let index = 0; index < 420; index += 1) simulation.tick();
+  for (let index = 0; index < 900; index += 1) simulation.tick();
   return new Map(simulationNodes.map((node) => [node.id, { x: node.x, y: node.y }]));
 }
 
@@ -282,6 +298,15 @@ watch(() => [props.layoutMode, props.layoutRevision, props.graph], () => {
 
 <template>
   <section ref="graphArea" class="graph-area">
+    <button
+      class="canvas-mode-toggle"
+      :class="{ active: compactMode }"
+      type="button"
+      @click="emit('toggle-compact-mode')"
+    >
+      {{ compactMode ? "完整模式" : "简洁模式" }}
+    </button>
+
     <VueFlow
       :key="`${layoutMode}-${layoutRevision}`"
       class="relation-flow"

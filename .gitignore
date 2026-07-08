@@ -16,4 +16,6 @@ backend/direct_init.py
 backend/insert_mock.py
 backend/killpids.py
 backend/setup_db.py
+backend/create_orphan_urls.py
+backend/migrate_widget_desc.py
 kill8000.bat

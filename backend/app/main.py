@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.routes import assets, graph, imports, replay
+from app.api.routes import ai, assets, graph, imports, replay
 from app.core.database import get_db
 from app.models import App, CanonicalPage, PageEdge
 
@@ -54,6 +54,7 @@ def query_app_graph(app_name: str, db: Session = Depends(get_db)) -> list[dict[s
             "page_text": "",  # will be filled from page instances later
             "image_url": "",
             "page_url": "",
+            "ai_recursive": False,  # default; will be filled from page instances
             "page_info": {
                 "page_type": page.page_type,
                 "structure_hash": page.primary_structure_hash,
@@ -75,6 +76,7 @@ def query_app_graph(app_name: str, db: Session = Depends(get_db)) -> list[dict[s
                 page_map[cid]["page_text"] = inst.ai_summary
             if inst.page_title:
                 page_map[cid]["page_url"] = f"/{inst.page_type}/{inst.page_title}"
+            page_map[cid]["ai_recursive"] = bool(inst.ai_recursive)
 
     # Get edges to build the tree
     edges = list(db.scalars(
@@ -85,7 +87,9 @@ def query_app_graph(app_name: str, db: Session = Depends(get_db)) -> list[dict[s
         )
     ))
 
-    # Build children relationships
+    # Build children relationships with widget_description
+    # widget_description is stored on each child node — it represents
+    # the widget on the parent that was clicked to enter this child
     child_parent_map: dict[str, list[str]] = {}
     all_children: set[str] = set()
     for edge in edges:
@@ -94,6 +98,9 @@ def query_app_graph(app_name: str, db: Session = Depends(get_db)) -> list[dict[s
         if parent_id in page_map and child_id in page_map:
             child_parent_map.setdefault(parent_id, []).append(child_id)
             all_children.add(child_id)
+            # Attach widget_description to the child node
+            if edge.widget_description:
+                page_map[child_id]["widget_description"] = edge.widget_description
 
     # Find root nodes (pages that are not children of any other page)
     root_ids = [pid for pid in page_map if pid not in all_children]
@@ -107,7 +114,6 @@ def query_app_graph(app_name: str, db: Session = Depends(get_db)) -> list[dict[s
     result = []
     for root_id in root_ids:
         node = page_map[root_id]
-        # Remove internal _canonical_id
         node.pop("_canonical_id", None)
         result.append(node)
 
@@ -127,3 +133,5 @@ app.include_router(imports.router, prefix="/api/imports", tags=["imports"])
 app.include_router(graph.router, prefix="/api/graph", tags=["graph"])
 app.include_router(assets.router, prefix="/api/assets", tags=["assets"])
 app.include_router(replay.router, prefix="/api/replay", tags=["replay"])
+app.include_router(ai.router, prefix="/ai", tags=["ai"])
+app.include_router(ai.router, prefix="/api/ai", tags=["ai"])

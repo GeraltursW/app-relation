@@ -22,10 +22,14 @@ const props = defineProps({
   loading: {
     type: Boolean,
     default: false
+  },
+  floatingAiState: {
+    type: Object,
+    default: () => ({})
   }
 });
 
-const emit = defineEmits(["update:keyword", "select-node"]);
+const emit = defineEmits(["update:keyword", "select-node", "explore-floating-node", "merge-floating-node"]);
 const collapsed = ref(new Set());
 
 const tree = computed(() => props.graph.roots.map((rootId) => buildNode(rootId)));
@@ -141,22 +145,47 @@ function searchableText(page) {
         <div v-if="loading" class="empty-state">等待图谱数据...</div>
         <div v-else-if="!floatingTree.length" class="empty-state">暂无游离页面</div>
         <div v-else class="floating-list">
-          <button
+          <div
             v-for="node in floatingTree"
             :key="node.id"
             class="floating-page-card"
             :class="{ active: selected.type === 'node' && selected.id === node.id, muted: isMuted(node) }"
-            type="button"
+            role="button"
+            tabindex="0"
             @click="emit('select-node', node.id)"
+            @keyup.enter="emit('select-node', node.id)"
           >
             <span>{{ node.page.displayTitle }}</span>
             <strong>{{ node.page.aiInference.label }}</strong>
             <em>{{ node.page.aiInference.reason }}</em>
             <small>{{ node.page.page_url || "no page url" }}</small>
-          </button>
+            <span
+              v-if="floatingAiState[node.id]"
+              class="floating-ai-status"
+              :class="`status-${floatingAiState[node.id].status}`"
+            >
+              {{ floatingAiState[node.id].message }}
+            </span>
+            <span class="floating-actions" @click.stop>
+              <button
+                type="button"
+                :disabled="floatingAiState[node.id]?.status === 'running' || floatingAiState[node.id]?.status === 'merging'"
+                @click="emit('explore-floating-node', node.id)"
+              >
+                {{ floatingAiState[node.id]?.status === "running" ? "探索中" : "AI 探索" }}
+              </button>
+              <button
+                v-if="floatingAiState[node.id]?.status === 'mergeable'"
+                type="button"
+                class="merge"
+                @click="emit('merge-floating-node', node.id)"
+              >
+                并入
+              </button>
+            </span>
+          </div>
         </div>
       </ScrollArea>
     </section>
   </aside>
 </template>
-

@@ -5,17 +5,26 @@ import InspectorPanel from "./components/InspectorPanel.vue";
 import TreeNav from "./components/TreeNav.vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { createEmptyGraph, normalizeBackendGraph, queryAppGraph } from "./data/graph.js";
+import {
+  createEmptyGraph,
+  mergeFloatingPageIntoGraph,
+  normalizeBackendGraph,
+  queryAppGraph,
+  requestAiExploreFloatingPage,
+  requestMergeFloatingPage
+} from "./data/graph.js";
 
 const appName = ref(import.meta.env.VITE_DEFAULT_APP_NAME || "demo");
 const selected = ref({ type: "node", id: "" });
 const keyword = ref("");
 const layoutMode = ref("horizontal");
+const compactMode = ref(false);
 const graphRef = ref(null);
 const layoutRevision = ref(0);
 const loading = ref(false);
 const errorMessage = ref("");
 const graph = ref(createEmptyGraph());
+const floatingAiState = ref({});
 
 const layoutModes = [
   { value: "horizontal", label: "左右排列" },
@@ -42,6 +51,7 @@ async function loadGraph() {
     const payload = await queryAppGraph(appName.value.trim());
     const normalized = normalizeBackendGraph(payload);
     graph.value = normalized;
+    floatingAiState.value = {};
     selected.value = { type: "node", id: normalized.roots[0] || "" };
     layoutRevision.value += 1;
     window.setTimeout(() => graphRef.value?.fitGraph(), 80);
@@ -83,6 +93,66 @@ function exportGraph() {
   graphRef.value?.exportImage();
 }
 
+async function exploreFloatingNode(nodeId) {
+  const page = graph.value.pageMap.get(nodeId);
+  if (!page) return;
+  floatingAiState.value = {
+    ...floatingAiState.value,
+    [nodeId]: { status: "running", message: "AI 正在调用 HDC 探索 URL..." }
+  };
+  try {
+    const result = await requestAiExploreFloatingPage(page);
+    const payload = result?.data || result?.result || result;
+    const canMerge = Boolean(payload?.can_merge ?? payload?.mergeable ?? payload?.suitable);
+    floatingAiState.value = {
+      ...floatingAiState.value,
+      [nodeId]: {
+        status: canMerge ? "mergeable" : "review",
+        message: payload?.reason || payload?.message || (canMerge ? "AI 推断可并入主树" : "AI 未找到稳定并入位置"),
+        result: payload
+      }
+    };
+  } catch (error) {
+    floatingAiState.value = {
+      ...floatingAiState.value,
+      [nodeId]: {
+        status: "failed",
+        message: error instanceof Error ? error.message : "AI 探索失败"
+      }
+    };
+  }
+}
+
+async function mergeFloatingNode(nodeId) {
+  const page = graph.value.pageMap.get(nodeId);
+  const state = floatingAiState.value[nodeId];
+  if (!page || !state?.result) return;
+  floatingAiState.value = {
+    ...floatingAiState.value,
+    [nodeId]: { ...state, status: "merging", message: "正在并入主树..." }
+  };
+  try {
+    const response = await requestMergeFloatingPage(page, state.result);
+    const payload = response?.data || response?.result || response || state.result;
+    graph.value = mergeFloatingPageIntoGraph(graph.value, nodeId, payload);
+    floatingAiState.value = {
+      ...floatingAiState.value,
+      [nodeId]: { ...state, status: "merged", message: "已并入主树", result: payload }
+    };
+    selected.value = { type: "node", id: nodeId };
+    layoutRevision.value += 1;
+  } catch (error) {
+    floatingAiState.value = {
+      ...floatingAiState.value,
+      [nodeId]: {
+        ...state,
+        status: "failed",
+        message: error instanceof Error ? error.message : "并入失败"
+      }
+    };
+  }
+}
+
 onMounted(loadGraph);
 </script>
 
@@ -91,8 +161,11 @@ onMounted(loadGraph);
     <TreeNav
       v-model:keyword="keyword"
       :graph="graph"
+      :floating-ai-state="floatingAiState"
       :loading="loading"
       :selected="selected"
+      @explore-floating-node="exploreFloatingNode"
+      @merge-floating-node="mergeFloatingNode"
       @select-node="selectNode"
     />
 
@@ -169,10 +242,12 @@ onMounted(loadGraph);
       <GraphCanvas
         ref="graphRef"
         :graph="graph"
+        :compact-mode="compactMode"
         :layout-mode="layoutMode"
         :layout-revision="layoutRevision"
         :keyword="keyword"
         :selected="selected"
+        @toggle-compact-mode="compactMode = !compactMode"
         @select-node="selectNode"
         @select-edge="selectEdge"
       />

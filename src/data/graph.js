@@ -17,6 +17,36 @@ export async function queryAppGraph(appName) {
   return response.json();
 }
 
+export async function requestAiExploreFloatingPage(page) {
+  return postToFirstAvailable([
+    "/ai/exploreFloatingPage",
+    "/api/ai/exploreFloatingPage",
+    "/ai/explore-floating-page",
+    "/api/ai/explore-floating-page"
+  ], {
+    id: page.backendId,
+    page_title: page.page_title,
+    page_text: page.page_text,
+    image_url: page.image_url,
+    page_url: page.page_url,
+    page_info: page.page_info
+  }, "AI explore");
+}
+
+export async function requestMergeFloatingPage(page, exploration) {
+  return postToFirstAvailable([
+    "/ai/mergeFloatingPage",
+    "/api/ai/mergeFloatingPage",
+    "/ai/merge-floating-page",
+    "/api/ai/merge-floating-page"
+  ], {
+    id: page.backendId,
+    node_id: page.nodeId,
+    page_url: page.page_url,
+    exploration
+  }, "Merge floating page");
+}
+
 export function normalizeBackendGraph(payload) {
   const graphPayload = payload?.data || payload?.result || payload;
   const { rootItems, floatingItems } = splitGraphPayload(graphPayload);
@@ -47,6 +77,8 @@ export function normalizeBackendGraph(payload) {
       image_url: rawNode.image_url || "",
       page_url: rawNode.page_url || "",
       page_info: rawNode.page_info || {},
+      widget_description: getWidgetDescription(rawNode),
+      ai_recursive: Boolean(rawNode.ai_recursive ?? rawNode.page_info?.ai_recursive),
       children: Array.isArray(rawNode.children) ? rawNode.children : [],
       pageActions: extractPageActions(rawNode),
       titleRepeatIndex: nextTitleCount,
@@ -60,12 +92,14 @@ export function normalizeBackendGraph(payload) {
     pages.push(node);
 
     if (parentId) {
+      const widgetDescription = getWidgetDescription(rawNode);
       edges.push({
         id: `${parentId}__${stableId}`,
         from: parentId,
         to: stableId,
-        label: "进入",
-        action_type: "navigate"
+        label: widgetDescription || "进入",
+        action_type: "navigate",
+        widget_description: widgetDescription
       });
     }
 
@@ -102,6 +136,42 @@ export function normalizeBackendGraph(payload) {
     floatingPages: pages.filter((page) => page.isFloating),
     maxLevel: pages.reduce((level, page) => Math.max(level, page.level), 0)
   };
+}
+
+export function mergeFloatingPageIntoGraph(graph, nodeId, mergeInfo = {}) {
+  const page = graph.pageMap.get(nodeId);
+  if (!page) return graph;
+
+  const requestedParentId = makeParentNodeId(mergeInfo);
+  const fallbackParentId = graph.roots[0] || null;
+  const parentId = graph.pageMap.has(requestedParentId) ? requestedParentId : fallbackParentId;
+  const parent = parentId ? graph.pageMap.get(parentId) : null;
+  const pages = graph.pages.map((item) => {
+    if (item.nodeId !== nodeId) return item;
+    return {
+      ...item,
+      isFloating: false,
+      parentId,
+      level: parent ? parent.level + 1 : 1,
+      ai_recursive: Boolean(mergeInfo.ai_recursive ?? true),
+      widget_description: mergeInfo.widget_description || mergeInfo.widgth_descirption || item.widget_description || "AI 探索并入"
+    };
+  });
+  const edges = parentId
+    ? [
+        ...graph.edges,
+        {
+          id: `${parentId}__${nodeId}`,
+          from: parentId,
+          to: nodeId,
+          label: mergeInfo.widget_description || mergeInfo.widgth_descirption || "AI 探索并入",
+          action_type: "navigate",
+          widget_description: mergeInfo.widget_description || mergeInfo.widgth_descirption || "AI 探索并入"
+        }
+      ]
+    : graph.edges;
+
+  return rebuildGraphIndexes({ ...graph, pages, edges });
 }
 
 export function createEmptyGraph() {
@@ -247,6 +317,68 @@ function inferStateKey(label) {
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+async function postToFirstAvailable(paths, payload, label) {
+  const errors = [];
+  for (const path of paths) {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (response.ok) return response.json();
+    errors.push(`${path}: ${response.status}`);
+    if (response.status !== 404) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(`${label} failed: ${response.status}${detail ? ` ${detail}` : ""}`);
+    }
+  }
+  throw new Error(`${label} endpoint not found. Tried ${errors.join(", ")}`);
+}
+
+function rebuildGraphIndexes(graph) {
+  const pageMap = new Map(graph.pages.map((page) => [page.nodeId, page]));
+  const childrenMap = graph.edges.reduce((map, edge) => {
+    if (!map.has(edge.from)) map.set(edge.from, []);
+    map.get(edge.from).push(edge);
+    return map;
+  }, new Map());
+  const incomingMap = graph.edges.reduce((map, edge) => {
+    if (!map.has(edge.to)) map.set(edge.to, []);
+    map.get(edge.to).push(edge);
+    return map;
+  }, new Map());
+  return {
+    ...graph,
+    pageMap,
+    childrenMap,
+    incomingMap,
+    roots: graph.pages.filter((page) => !page.parentId && !page.isFloating).map((page) => page.nodeId),
+    floatingRoots: graph.pages.filter((page) => !page.parentId && page.isFloating).map((page) => page.nodeId),
+    floatingPages: graph.pages.filter((page) => page.isFloating),
+    maxLevel: graph.pages.reduce((level, page) => Math.max(level, page.level), 0)
+  };
+}
+
+function makeParentNodeId(mergeInfo = {}) {
+  const id = mergeInfo.target_parent_node_id || mergeInfo.parent_node_id;
+  if (id) return String(id);
+  const backendId = mergeInfo.target_parent_id || mergeInfo.parent_id || mergeInfo.parent_page_id;
+  if (backendId !== undefined && backendId !== null) return `page-${backendId}`;
+  return "";
+}
+
+function getWidgetDescription(rawNode) {
+  return String(
+    rawNode.widgth_descirption ||
+    rawNode.widget_description ||
+    rawNode.width_description ||
+    rawNode.widgetDescription ||
+    rawNode.page_info?.widgth_descirption ||
+    rawNode.page_info?.widget_description ||
+    ""
+  ).trim();
 }
 
 function splitGraphPayload(graphPayload) {

@@ -46,9 +46,9 @@ def get_app_graph(app_id: UUID, db: Session = Depends(get_db)) -> AppGraphRespon
             label=edge.label,
             action_type=edge.action_type,
             confidence=float(edge.confidence) if edge.confidence is not None else None,
+            widget_description=edge.widget_description,
         )
         for edge in edges
         if edge.from_canonical_page_id and edge.to_canonical_page_id
     ]
     return AppGraphResponse(app_id=app_id, nodes=nodes, edges=graph_edges)
-

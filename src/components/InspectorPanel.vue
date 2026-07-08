@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import SmartImage from "./shared/SmartImage.vue";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,6 +28,8 @@ const props = defineProps({
   }
 });
 
+const previewImage = ref(null);
+
 const detail = computed(() => {
   if (!props.payload) return null;
 
@@ -40,6 +42,7 @@ const detail = computed(() => {
       title: `${fromPage?.displayTitle || edge.from} -> ${toPage?.displayTitle || edge.to}`,
       rows: [
         ["跳转关系", `${fromPage?.displayTitle || edge.from} -> ${toPage?.displayTitle || edge.to}`],
+        ["父节点控件", edge.widget_description || edge.label || "-"],
         ["动作类型", edge.action_type || "navigate"],
         ["边 ID", edge.id]
       ],
@@ -47,11 +50,7 @@ const detail = computed(() => {
         imageForPage(fromPage, "来源页面"),
         imageForPage(toPage, "目标页面")
       ].filter(Boolean),
-      json: {
-        edge,
-        fromPage,
-        toPage
-      }
+      json: { edge, fromPage, toPage }
     };
   }
 
@@ -70,6 +69,8 @@ const detail = computed(() => {
       ["标题重复序号", page.titleRepeatIndex],
       ["页面归属", page.isFloating ? "游离 URL 页面" : "主图谱页面"],
       ["页面 URL", page.page_url || "-"],
+      ["AI 推断图片", page.ai_recursive ? "是" : "否"],
+      ["父节点控件", page.widget_description || "-"],
       ["图谱层级", `第 ${page.level} 层`],
       ["父节点", props.graph.pageMap.get(page.parentId)?.displayTitle || "-"],
       ["上游入口", `${incoming.length} 个`],
@@ -84,7 +85,9 @@ const detail = computed(() => {
       page_title: page.page_title,
       page_text: page.page_text,
       image_url: page.image_url,
+      ai_recursive: page.ai_recursive,
       page_url: page.page_url,
+      widget_description: page.widget_description,
       page_info: page.page_info,
       page_actions: page.pageActions,
       ai_inference: page.aiInference,
@@ -116,6 +119,10 @@ function imageForPage(page, kind) {
     kind
   };
 }
+
+function openImagePreview(image) {
+  previewImage.value = image;
+}
 </script>
 
 <template>
@@ -137,15 +144,26 @@ function imageForPage(page, kind) {
           </div>
         </div>
 
-        <div class="image-strip">
-          <SmartImage
+        <section v-if="detail.images.length" class="image-strip">
+          <button
             v-for="image in detail.images"
             :key="image.title + image.kind"
-            :candidates="image.candidates"
-            :title="image.title"
-            :kind="image.kind"
-          />
-        </div>
+            class="inspector-image-card"
+            type="button"
+            @click="openImagePreview(image)"
+          >
+            <span class="inspector-image-meta">
+              <strong>{{ image.kind }}</strong>
+              <em>点击全屏</em>
+            </span>
+            <SmartImage
+              :candidates="image.candidates"
+              :title="image.title"
+              :kind="image.kind"
+            />
+            <span class="inspector-image-title">{{ image.title }}</span>
+          </button>
+        </section>
 
         <Card v-if="detail.mode === 'node'" class="ai-panel">
           <CardHeader class="replay-card-head">
@@ -235,6 +253,23 @@ function imageForPage(page, kind) {
     </ScrollArea>
 
     <div v-else class="empty-state inspector-empty">请选择一个图谱节点</div>
+
+    <Teleport to="body">
+      <div v-if="previewImage" class="image-preview-overlay" @click="previewImage = null">
+        <div class="image-preview-shell inspector-preview-shell" @click.stop>
+          <button class="image-preview-close" type="button" @click="previewImage = null">关闭</button>
+          <SmartImage
+            class="image-preview-full"
+            :candidates="previewImage.candidates"
+            :title="previewImage.title"
+            :kind="previewImage.kind"
+          />
+          <div class="image-preview-caption">
+            <strong>{{ previewImage.title }}</strong>
+            <span>{{ previewImage.kind }}</span>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </aside>
 </template>
-
