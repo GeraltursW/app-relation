@@ -52,7 +52,10 @@
 │           └── hash.py           # 截图/结构哈希、页面结构归一化
 ├── docs/                         # 设计文档
 │   ├── backend-data-model.md     # 数据库设计、Page Hash 指纹体系、向量库方案
-│   └── page-deduplication-flow.md # 页面去重流程、structure_hash 生成与归并评分
+│   ├── page-deduplication-flow.md # 页面去重流程、structure_hash 生成与归并评分
+│   ├── page-action-layering.md    # 页面动作分层：跳转、状态、弹层、外部动作
+│   ├── use-case-replay-model.md   # 用例复现、长按滑动、性能采集窗口
+│   └── ai-exploration-incremental-traversal.md # AI 探索、HDC 脚本、增量遍历
 ├── dist/                         # 前端构建产物
 ├── vite.config.js                # Vite 构建配置（含 @ 路径别名）
 ├── tailwind.config.js            # Tailwind CSS 配置
@@ -99,6 +102,9 @@
 |---|---|
 | `docs/backend-data-model.md` | 完整数据库表设计（apps、scans、assets、page_instances、canonical_pages、page_widgets、page_edges、embeddings），Page Hash 四维指纹体系（screenshot_hash / visual_hash / structure_hash / route_hash），向量库方案，归并评分模型，入库流程。 |
 | `docs/page-deduplication-flow.md` | 页面去重核心流程：asset 保存 → 哈希计算 → AI/OCR 识别 → 归一化 → structure_hash 生成 → 候选 canonical_page 查询 → 归并评分 → 创建或归并。含抖音视频 Feed 完整示例和动态区域过滤规则。 |
+| `docs/page-action-layering.md` | 页面控件动作分层，说明跳转动作、状态动作、弹层动作、外部动作如何进入图谱和右侧详情。 |
+| `docs/use-case-replay-model.md` | 用例层设计，说明页面间转换、长按、滑动、等待条件、失败兜底和功耗/性能采集窗口。 |
+| `docs/ai-exploration-incremental-traversal.md` | AI 自由探索与增量遍历方案，包含后端接口、HDC 脚本交互、拖拽并入、候选边和持续增加图片的策略。 |
 
 ## 技术栈
 

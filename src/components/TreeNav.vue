@@ -29,8 +29,20 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(["update:keyword", "select-node", "explore-floating-node", "merge-floating-node"]);
+const emit = defineEmits([
+  "update:keyword",
+  "select-node",
+  "explore-floating-node",
+  "merge-floating-node",
+  "manual-merge-floating-node",
+  "move-tree-node"
+]);
+
 const collapsed = ref(new Set());
+const draggingFloatingId = ref("");
+const draggingTreeId = ref("");
+const dragMode = ref(false);
+const treeEditMode = ref(false);
 
 const tree = computed(() => props.graph.roots.map((rootId) => buildNode(rootId)));
 const floatingTree = computed(() => props.graph.floatingRoots.map((rootId) => buildNode(rootId)));
@@ -44,6 +56,10 @@ const searchResults = computed(() => {
 
 watch(() => props.graph, () => {
   collapsed.value = new Set();
+  draggingFloatingId.value = "";
+  draggingTreeId.value = "";
+  dragMode.value = false;
+  treeEditMode.value = false;
 });
 
 function buildNode(nodeId) {
@@ -60,6 +76,20 @@ function toggle(nodeId) {
   if (next.has(nodeId)) next.delete(nodeId);
   else next.add(nodeId);
   collapsed.value = next;
+}
+
+function toggleDragMode() {
+  dragMode.value = !dragMode.value;
+  if (dragMode.value) treeEditMode.value = false;
+  draggingFloatingId.value = "";
+  draggingTreeId.value = "";
+}
+
+function toggleTreeEditMode() {
+  treeEditMode.value = !treeEditMode.value;
+  if (treeEditMode.value) dragMode.value = false;
+  draggingFloatingId.value = "";
+  draggingTreeId.value = "";
 }
 
 function isMuted(node) {
@@ -79,6 +109,45 @@ function searchableText(page) {
     page.aiInference?.reason,
     JSON.stringify(page.page_info || {})
   ].join(" ").toLowerCase();
+}
+
+function handleFloatingDragStart(event, nodeId) {
+  if (!dragMode.value) {
+    event.preventDefault();
+    return;
+  }
+  draggingFloatingId.value = nodeId;
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("application/x-floating-node-id", nodeId);
+  event.dataTransfer.setData("text/plain", nodeId);
+}
+
+function handleFloatingDragEnd() {
+  draggingFloatingId.value = "";
+}
+
+function handleDropOnTree(payload) {
+  const nodeId = payload?.nodeId || draggingFloatingId.value;
+  const targetParentId = payload?.targetParentId || payload;
+  if (!nodeId || nodeId === targetParentId) return;
+  emit("manual-merge-floating-node", { nodeId, targetParentId });
+  draggingFloatingId.value = "";
+  dragMode.value = false;
+}
+
+function handleTreeDragStart(nodeId) {
+  draggingTreeId.value = nodeId;
+}
+
+function handleTreeDragEnd() {
+  draggingTreeId.value = "";
+}
+
+function handleMoveTreeNode(payload) {
+  if (!payload?.nodeId || !payload?.targetParentId) return;
+  emit("move-tree-node", payload);
+  draggingTreeId.value = "";
+  treeEditMode.value = false;
 }
 </script>
 
@@ -113,49 +182,107 @@ function searchableText(page) {
       </button>
     </div>
 
-    <section class="sidebar-section main-tree-section">
+    <section class="sidebar-section main-tree-section" :class="{ 'drop-mode': dragMode || treeEditMode }">
       <div class="sidebar-section-head">
         <strong>主图谱树</strong>
-        <Badge variant="secondary">{{ graph.roots.length }}</Badge>
+        <div class="floating-head-actions">
+          <button
+            class="drag-mode-toggle"
+            :class="{ active: treeEditMode }"
+            type="button"
+            :disabled="!graph.roots.length"
+            @click="toggleTreeEditMode"
+          >
+            {{ treeEditMode ? "关闭编辑" : "编辑结构" }}
+          </button>
+          <Badge variant="secondary">{{ graph.roots.length }}</Badge>
+        </div>
       </div>
       <ScrollArea class="tree-scroll module-scroll">
         <div v-if="loading" class="empty-state">图谱加载中...</div>
         <div v-else-if="!tree.length" class="empty-state">暂无主树数据</div>
-        <nav v-else class="tree-nav" aria-label="主图谱树">
-          <TreeItem
-            v-for="node in tree"
-            :key="node.id"
-            :node="node"
-            :collapsed="collapsed"
-            :selected="selected"
-            :is-muted="isMuted"
-            @toggle="toggle"
-            @select-node="emit('select-node', $event)"
-          />
-        </nav>
+        <div v-else>
+          <p v-if="treeEditMode" class="manual-merge-hint active">
+            拖动主树节点到另一个节点上，可调整父子关系。系统会阻止拖到自身或子节点下。
+          </p>
+          <nav class="tree-nav" aria-label="主图谱树">
+            <TreeItem
+              v-for="node in tree"
+              :key="node.id"
+              :node="node"
+              :collapsed="collapsed"
+              :selected="selected"
+              :is-muted="isMuted"
+              :can-drop-floating="dragMode || Boolean(draggingFloatingId)"
+              :tree-edit-mode="treeEditMode"
+              @toggle="toggle"
+              @drop-floating-node="handleDropOnTree"
+              @move-tree-node="handleMoveTreeNode"
+              @tree-drag-start="handleTreeDragStart"
+              @tree-drag-end="handleTreeDragEnd"
+              @select-node="emit('select-node', $event)"
+            />
+          </nav>
+        </div>
       </ScrollArea>
     </section>
 
     <section class="sidebar-section floating-section">
       <div class="sidebar-section-head">
         <strong>游离 URL 页面</strong>
-        <Badge variant="secondary">{{ graph.floatingPages.length }}</Badge>
+        <div class="floating-head-actions">
+          <button
+            class="drag-mode-toggle"
+            :class="{ active: dragMode }"
+            type="button"
+            :disabled="!graph.floatingPages.length"
+            @click="toggleDragMode"
+          >
+            {{ dragMode ? "关闭拖拽" : "开启拖拽" }}
+          </button>
+          <Badge variant="secondary">{{ graph.floatingPages.length }}</Badge>
+        </div>
       </div>
       <ScrollArea class="floating-scroll module-scroll">
         <div v-if="loading" class="empty-state">等待图谱数据...</div>
         <div v-else-if="!floatingTree.length" class="empty-state">暂无游离页面</div>
         <div v-else class="floating-list">
+          <p class="manual-merge-hint" :class="{ active: dragMode }">
+            {{ dragMode ? "拖住卡片或拖拽按钮，放到主树节点上完成归类。" : "点击“开启拖拽”后，可把游离页面拖到主树节点下。" }}
+          </p>
           <div
             v-for="node in floatingTree"
             :key="node.id"
             class="floating-page-card"
-            :class="{ active: selected.type === 'node' && selected.id === node.id, muted: isMuted(node) }"
+            :class="{
+              active: selected.type === 'node' && selected.id === node.id,
+              muted: isMuted(node),
+              dragging: draggingFloatingId === node.id,
+              'drag-enabled': dragMode
+            }"
+            :draggable="dragMode"
             role="button"
             tabindex="0"
             @click="emit('select-node', node.id)"
+            @dragend="handleFloatingDragEnd"
+            @dragstart="handleFloatingDragStart($event, node.id)"
             @keyup.enter="emit('select-node', node.id)"
           >
-            <span>{{ node.page.displayTitle }}</span>
+            <div class="floating-card-head">
+              <span>{{ node.page.displayTitle }}</span>
+              <button
+                v-if="dragMode"
+                class="drag-handle"
+                draggable="true"
+                title="拖拽到主树节点并入"
+                type="button"
+                @click.stop
+                @dragend="handleFloatingDragEnd"
+                @dragstart.stop="handleFloatingDragStart($event, node.id)"
+              >
+                拖拽
+              </button>
+            </div>
             <strong>{{ node.page.aiInference.label }}</strong>
             <em>{{ node.page.aiInference.reason }}</em>
             <small>{{ node.page.page_url || "no page url" }}</small>

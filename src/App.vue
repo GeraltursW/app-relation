@@ -8,9 +8,11 @@ import { Input } from "@/components/ui/input";
 import {
   createEmptyGraph,
   mergeFloatingPageIntoGraph,
+  moveGraphNode,
   normalizeBackendGraph,
   queryAppGraph,
   requestAiExploreFloatingPage,
+  requestManualMergeFloatingPage,
   requestMergeFloatingPage
 } from "./data/graph.js";
 
@@ -153,6 +155,72 @@ async function mergeFloatingNode(nodeId) {
   }
 }
 
+async function manualMergeFloatingNode({ nodeId, targetParentId }) {
+  const page = graph.value.pageMap.get(nodeId);
+  const targetParent = graph.value.pageMap.get(targetParentId);
+  if (!page || !targetParent || page.nodeId === targetParent.nodeId) return;
+
+  const currentState = floatingAiState.value[nodeId] || {};
+  floatingAiState.value = {
+    ...floatingAiState.value,
+    [nodeId]: {
+      ...currentState,
+      status: "merging",
+      message: "正在人工归类并入..."
+    }
+  };
+
+  try {
+    const response = await requestManualMergeFloatingPage(page, targetParent);
+    const payload = response?.data || response?.result || response;
+    graph.value = mergeFloatingPageIntoGraph(graph.value, nodeId, payload);
+    floatingAiState.value = {
+      ...floatingAiState.value,
+      [nodeId]: {
+        ...currentState,
+        status: "merged",
+        message: "已人工并入主图谱",
+        result: payload
+      }
+    };
+  } catch (error) {
+    const fallbackPayload = {
+      can_merge: true,
+      target_parent_node_id: targetParentId,
+      target_parent_id: targetParent.backendId,
+      widget_description: "人工拖拽归类",
+      ai_recursive: true,
+      reason: error instanceof Error ? error.message : "manual merge fallback"
+    };
+    graph.value = mergeFloatingPageIntoGraph(graph.value, nodeId, fallbackPayload);
+    floatingAiState.value = {
+      ...floatingAiState.value,
+      [nodeId]: {
+        ...currentState,
+        status: "merged",
+        message: "后端暂不可用，已本地并入待复核",
+        result: fallbackPayload
+      }
+    };
+  }
+
+  selected.value = { type: "node", id: nodeId };
+  layoutRevision.value += 1;
+  window.setTimeout(() => graphRef.value?.fitGraph(), 80);
+}
+
+function moveTreeNode({ nodeId, targetParentId }) {
+  const beforeGraph = graph.value;
+  graph.value = moveGraphNode(graph.value, nodeId, targetParentId, {
+    widget_description: "人工调整归类",
+    reason: "用户在左侧树结构中拖拽调整"
+  });
+  if (graph.value === beforeGraph) return;
+  selected.value = { type: "node", id: nodeId };
+  layoutRevision.value += 1;
+  window.setTimeout(() => graphRef.value?.fitGraph(), 80);
+}
+
 onMounted(loadGraph);
 </script>
 
@@ -165,7 +233,9 @@ onMounted(loadGraph);
       :loading="loading"
       :selected="selected"
       @explore-floating-node="exploreFloatingNode"
+      @manual-merge-floating-node="manualMergeFloatingNode"
       @merge-floating-node="mergeFloatingNode"
+      @move-tree-node="moveTreeNode"
       @select-node="selectNode"
     />
 

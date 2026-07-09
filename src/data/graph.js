@@ -47,6 +47,26 @@ export async function requestMergeFloatingPage(page, exploration) {
   }, "Merge floating page");
 }
 
+export async function requestManualMergeFloatingPage(page, targetParent, options = {}) {
+  return postToFirstAvailable([
+    "/ai/manualMergeFloatingPage",
+    "/api/ai/manualMergeFloatingPage",
+    "/ai/manual-merge-floating-page",
+    "/api/ai/manual-merge-floating-page"
+  ], {
+    id: page.backendId,
+    node_id: page.nodeId,
+    page_title: page.page_title,
+    page_text: page.page_text,
+    page_url: page.page_url,
+    image_url: page.image_url,
+    target_parent_id: targetParent?.backendId ?? null,
+    target_parent_node_id: targetParent?.nodeId || "",
+    widget_description: options.widget_description || "人工拖拽归类",
+    operator_note: options.operator_note || "人工拖拽游离页面到主图谱"
+  }, "Manual merge floating page");
+}
+
 export function normalizeBackendGraph(payload) {
   const graphPayload = payload?.data || payload?.result || payload;
   const { rootItems, floatingItems } = splitGraphPayload(graphPayload);
@@ -174,6 +194,40 @@ export function mergeFloatingPageIntoGraph(graph, nodeId, mergeInfo = {}) {
   return rebuildGraphIndexes({ ...graph, pages, edges });
 }
 
+export function moveGraphNode(graph, nodeId, targetParentId, moveInfo = {}) {
+  if (!nodeId || !targetParentId || nodeId === targetParentId) return graph;
+  const page = graph.pageMap.get(nodeId);
+  const targetParent = graph.pageMap.get(targetParentId);
+  if (!page || !targetParent || page.isFloating || targetParent.isFloating) return graph;
+  if (isDescendantOf(graph, targetParentId, nodeId)) return graph;
+
+  const widgetDescription = moveInfo.widget_description || page.widget_description || "人工调整归类";
+  const pages = graph.pages.map((item) => {
+    if (item.nodeId !== nodeId) return item;
+    return {
+      ...item,
+      parentId: targetParentId,
+      widget_description: widgetDescription,
+      manual_reviewed: true,
+      review_note: moveInfo.reason || "人工编辑树结构"
+    };
+  });
+  const edges = [
+    ...graph.edges.filter((edge) => edge.to !== nodeId),
+    {
+      id: `${targetParentId}__${nodeId}`,
+      from: targetParentId,
+      to: nodeId,
+      label: widgetDescription,
+      action_type: "navigate",
+      widget_description: widgetDescription,
+      source: "manual_edit"
+    }
+  ];
+
+  return normalizeGraphLevels(rebuildGraphIndexes({ ...graph, pages, edges }));
+}
+
 export function createEmptyGraph() {
   return {
     pages: [],
@@ -186,6 +240,35 @@ export function createEmptyGraph() {
     floatingPages: [],
     maxLevel: 0
   };
+}
+
+function isDescendantOf(graph, nodeId, ancestorId) {
+  let cursor = graph.pageMap.get(nodeId);
+  while (cursor?.parentId) {
+    if (cursor.parentId === ancestorId) return true;
+    cursor = graph.pageMap.get(cursor.parentId);
+  }
+  return false;
+}
+
+function normalizeGraphLevels(graph) {
+  const visited = new Set();
+  const nextPages = graph.pages.map((page) => ({ ...page }));
+  const nextPageMap = new Map(nextPages.map((page) => [page.nodeId, page]));
+
+  function visit(nodeId, level) {
+    if (visited.has(nodeId)) return;
+    visited.add(nodeId);
+    const page = nextPageMap.get(nodeId);
+    if (!page) return;
+    page.level = level;
+    (graph.childrenMap.get(nodeId) || []).forEach((edge) => visit(edge.to, level + 1));
+  }
+
+  graph.roots.forEach((rootId) => visit(rootId, 1));
+  graph.floatingRoots.forEach((rootId) => visit(rootId, 1));
+
+  return rebuildGraphIndexes({ ...graph, pages: nextPages });
 }
 
 export function makeNodeId(rawNode, pageText, path) {

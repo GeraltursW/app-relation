@@ -22,6 +22,19 @@ class FloatingMergeRequest(BaseModel):
     exploration: dict[str, Any] = Field(default_factory=dict)
 
 
+class ManualMergeRequest(BaseModel):
+    id: int | str | None = None
+    node_id: str = ""
+    page_title: str = ""
+    page_text: str = ""
+    page_url: str = ""
+    image_url: str = ""
+    target_parent_id: int | str | None = None
+    target_parent_node_id: str = ""
+    widget_description: str = "人工拖拽归类"
+    operator_note: str = ""
+
+
 @router.post("/exploreFloatingPage")
 @router.post("/explore-floating-page")
 def explore_floating_page(request: FloatingExploreRequest) -> dict[str, Any]:
@@ -37,7 +50,27 @@ def merge_floating_page(request: FloatingMergeRequest) -> dict[str, Any]:
         "target_parent_id": exploration.get("target_parent_id") or exploration.get("parent_page_id"),
         "target_parent_node_id": exploration.get("target_parent_node_id") or exploration.get("parent_node_id"),
         "widget_description": exploration.get("widget_description") or exploration.get("widgth_descirption") or "AI 探索并入",
+        "widgth_descirption": exploration.get("widget_description") or exploration.get("widgth_descirption") or "AI 探索并入",
+        "ai_recursive": bool(exploration.get("ai_recursive", True)),
         "reason": exploration.get("reason") or "已接收并入请求。",
+    }
+
+
+@router.post("/manualMergeFloatingPage")
+@router.post("/manual-merge-floating-page")
+def manual_merge_floating_page(request: ManualMergeRequest) -> dict[str, Any]:
+    return {
+        "can_merge": True,
+        "mergeable": True,
+        "source": "manual_drag",
+        "page_id": request.id,
+        "node_id": request.node_id,
+        "target_parent_id": request.target_parent_id,
+        "target_parent_node_id": request.target_parent_node_id,
+        "widget_description": request.widget_description or "人工拖拽归类",
+        "widgth_descirption": request.widget_description or "人工拖拽归类",
+        "ai_recursive": True,
+        "reason": request.operator_note or "游离页面已通过人工拖拽完成归类。",
     }
 
 
@@ -69,6 +102,7 @@ def _mergeable(widget_description: str, reason: str) -> dict[str, Any]:
         "mergeable": True,
         "widget_description": widget_description,
         "widgth_descirption": widget_description,
+        "ai_recursive": True,
         "reason": reason,
     }
 
@@ -83,4 +117,3 @@ def _review(reason: str) -> dict[str, Any]:
 
 def _contains(value: str, keywords: list[str]) -> bool:
     return any(keyword.lower() in value for keyword in keywords)
-
