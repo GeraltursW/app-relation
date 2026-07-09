@@ -1468,6 +1468,29 @@ h2 {
   font-weight: 700;
 }
 
+.inspector-image-section {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  background: #ffffff;
+}
+
+.inspector-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  color: #102a4c;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.inspector-section-title span {
+  color: #64748b;
+  font-size: 11px;
+}
+
 .image-strip {
   display: flex;
   gap: 10px;

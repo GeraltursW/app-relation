@@ -87,7 +87,7 @@ const detail = computed(() => {
       ["页面内动作", `${page.pageActions.length} 个`],
       ["复核状态", page.review_status || "pending"]
     ],
-    images: imageUrls.map((url, index) => imageItem(url, page.displayTitle, index === 0 ? "主截图" : `证据图 ${index + 1}`)),
+    images: imageItemsForPage(page, "主截图"),
     json: {
       nodeId: page.nodeId,
       backendId: page.backendId,
@@ -167,14 +167,16 @@ function imageItem(url, title, kind) {
   return {
     title,
     rawUrl: url,
-    candidates: [buildImageApiUrl(url)],
+    candidates: url ? [buildImageApiUrl(url)] : [],
     kind
   };
 }
 
 function imageItemsForPage(page, kind) {
   if (!page) return [];
-  return normalizeImageUrls(page).map((url, index) => imageItem(url, page.displayTitle, index === 0 ? kind : `${kind} ${index + 1}`));
+  const urls = normalizeImageUrls(page);
+  if (!urls.length) return [imageItem("", page.displayTitle, kind)];
+  return urls.map((url, index) => imageItem(url, page.displayTitle, index === 0 ? kind : `${kind} ${index + 1}`));
 }
 
 function openImagePreview(image) {
@@ -337,25 +339,31 @@ async function saveEdit() {
           </CardContent>
         </Card>
 
-        <section v-if="detail.images.length" class="image-strip">
-          <button
-            v-for="image in detail.images"
-            :key="image.rawUrl + image.kind"
-            class="inspector-image-card"
-            type="button"
-            @click="openImagePreview(image)"
-          >
-            <span class="inspector-image-meta">
-              <strong>{{ image.kind }}</strong>
-              <em>点击全屏</em>
-            </span>
-            <SmartImage
-              :candidates="image.candidates"
-              :title="image.title"
-              :kind="image.kind"
-            />
-            <span class="inspector-image-title">{{ image.rawUrl || image.title }}</span>
-          </button>
+        <section v-if="detail.images.length" class="inspector-image-section">
+          <div class="inspector-section-title">
+            <strong>截图列表</strong>
+            <span>{{ detail.images.length }} 张</span>
+          </div>
+          <div class="image-strip">
+            <button
+              v-for="image in detail.images"
+              :key="`${image.rawUrl || image.title}-${image.kind}`"
+              class="inspector-image-card"
+              type="button"
+              @click="openImagePreview(image)"
+            >
+              <span class="inspector-image-meta">
+                <strong>{{ image.kind }}</strong>
+                <em>点击全屏</em>
+              </span>
+              <SmartImage
+                :candidates="image.candidates"
+                :title="image.title"
+                :kind="image.kind"
+              />
+              <span class="inspector-image-title">{{ image.rawUrl || image.title }}</span>
+            </button>
+          </div>
         </section>
 
         <Card v-if="detail.mode === 'node'" class="ai-panel">
