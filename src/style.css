@@ -86,6 +86,31 @@ button {
   border-left: 1px solid var(--border);
 }
 
+.inspector-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inspector-edit-toggle {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.inspector-edit-toggle.active,
+.inspector-edit-toggle:hover {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  color: #92400e;
+}
+
 .inspector-scroll {
   flex: 1;
   min-height: 0;
@@ -1636,6 +1661,179 @@ h2 {
   border-radius: 12px;
   background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
   box-shadow: 0 10px 24px rgba(27, 80, 145, .08);
+}
+
+.review-editor {
+  margin: 12px;
+  padding: 12px;
+  border: 1px solid #f59e0b;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fffbeb 0%, #ffffff 100%);
+  box-shadow: 0 10px 24px rgba(146, 64, 14, .08);
+}
+
+.review-editor-content {
+  display: grid;
+  gap: 12px;
+}
+
+.review-editor label {
+  display: grid;
+  gap: 6px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.review-editor input[type="text"],
+.review-editor textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  outline: none;
+}
+
+.review-editor textarea {
+  resize: vertical;
+}
+
+.review-editor input:focus,
+.review-editor textarea:focus {
+  border-color: #1769e0;
+  box-shadow: 0 0 0 3px rgba(23, 105, 224, .12);
+}
+
+.review-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.review-check {
+  display: flex !important;
+  align-items: center;
+  height: 36px;
+  grid-template-columns: none !important;
+  white-space: nowrap;
+}
+
+.review-check input {
+  width: 16px;
+  height: 16px;
+}
+
+.image-editor {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px dashed #f59e0b;
+  border-radius: 10px;
+  background: #fffaf0;
+}
+
+.image-editor-head,
+.image-add-row,
+.review-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.image-editor-head {
+  justify-content: space-between;
+  color: #92400e;
+  font-size: 12px;
+}
+
+.image-add-row input {
+  flex: 1;
+}
+
+.image-add-row button,
+.review-actions button,
+.editable-image-item button {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1769e0;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.review-actions button:first-child {
+  border-color: #1769e0;
+  background: #1769e0;
+  color: #ffffff;
+}
+
+.review-actions button.ghost {
+  border-color: #cbd5e1;
+  background: #ffffff;
+  color: #475569;
+}
+
+.review-actions span {
+  color: #15803d;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.editable-image-list {
+  display: grid;
+  gap: 8px;
+}
+
+.editable-image-item {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.editable-image-item img {
+  width: 44px;
+  height: 58px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.editable-image-item div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.editable-image-item strong,
+.editable-image-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editable-image-item strong {
+  color: #0f172a;
+  font-size: 12px;
+}
+
+.editable-image-item span {
+  color: #64748b;
+  font-size: 11px;
 }
 
 .ai-panel-head {

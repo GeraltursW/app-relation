@@ -55,7 +55,8 @@
 │   ├── page-deduplication-flow.md # 页面去重流程、structure_hash 生成与归并评分
 │   ├── page-action-layering.md    # 页面动作分层：跳转、状态、弹层、外部动作
 │   ├── use-case-replay-model.md   # 用例复现、长按滑动、性能采集窗口
-│   └── ai-exploration-incremental-traversal.md # AI 探索、HDC 脚本、增量遍历
+│   ├── ai-exploration-incremental-traversal.md # AI 探索、HDC 脚本、增量遍历
+│   └── page-review-editing-api.md # 右侧复核编辑与后端保存接口
 ├── dist/                         # 前端构建产物
 ├── vite.config.js                # Vite 构建配置（含 @ 路径别名）
 ├── tailwind.config.js            # Tailwind CSS 配置
@@ -105,6 +106,8 @@
 | `docs/page-action-layering.md` | 页面控件动作分层，说明跳转动作、状态动作、弹层动作、外部动作如何进入图谱和右侧详情。 |
 | `docs/use-case-replay-model.md` | 用例层设计，说明页面间转换、长按、滑动、等待条件、失败兜底和功耗/性能采集窗口。 |
 | `docs/ai-exploration-incremental-traversal.md` | AI 自由探索与增量遍历方案，包含后端接口、HDC 脚本交互、拖拽并入、候选边和持续增加图片的策略。 |
+| `docs/page-review-editing-api.md` | 右侧 Inspector 复核编辑接口，说明 AI 推理内容、图片证据、页面字段如何提交后端保存。 |
+| `docs/20260710-page-review-editing-iteration.md` | 2026-07-10 迭代记录，说明页面复核编辑、图片维护、图展示区域同步更新和后端接口。 |
 
 ## 技术栈
 

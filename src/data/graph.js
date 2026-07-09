@@ -9,6 +9,16 @@ export function buildImageApiUrl(imageUrl) {
   return `${API_BASE_URL}/image/${encodeURIComponent(imageUrl)}`;
 }
 
+export function normalizeImageUrls(page = {}) {
+  const rawList = [
+    page.image_url,
+    ...(Array.isArray(page.image_urls) ? page.image_urls : []),
+    ...(Array.isArray(page.images) ? page.images : []),
+    ...(Array.isArray(page.page_info?.image_urls) ? page.page_info.image_urls : [])
+  ];
+  return [...new Set(rawList.map((item) => String(item || "").trim()).filter(Boolean))];
+}
+
 export async function queryAppGraph(appName) {
   const response = await fetch(buildGraphApiUrl(appName));
   if (!response.ok) {
@@ -67,6 +77,57 @@ export async function requestManualMergeFloatingPage(page, targetParent, options
   }, "Manual merge floating page");
 }
 
+export async function requestSavePageReview(page, review) {
+  return postToFirstAvailable([
+    "/api/graph/pages/review",
+    "/api/graph/page-review",
+    "/graph/pages/review",
+    "/graph/page-review"
+  ], {
+    backend_id: page.backendId,
+    node_id: page.nodeId,
+    page_title: review.page_title,
+    page_text: review.page_text,
+    page_url: review.page_url,
+    image_url: review.image_url,
+    image_urls: review.image_urls,
+    ai_inference: review.ai_inference,
+    ai_recursive: review.ai_recursive,
+    widget_description: review.widget_description,
+    review_status: review.review_status || "edited",
+    review_note: review.review_note || ""
+  }, "Save page review");
+}
+
+export function applyPageReviewToGraph(graph, nodeId, review = {}) {
+  const pages = graph.pages.map((page) => {
+    if (page.nodeId !== nodeId) return page;
+    const imageUrls = normalizeImageUrls({
+      image_url: review.image_url,
+      image_urls: review.image_urls
+    });
+    const pageTitle = review.page_title ?? page.page_title;
+    return {
+      ...page,
+      page_title: pageTitle,
+      displayTitle: page.titleRepeatIndex > 1 ? `${pageTitle} #${page.titleRepeatIndex}` : pageTitle,
+      page_text: review.page_text ?? page.page_text,
+      page_url: review.page_url ?? page.page_url,
+      image_url: imageUrls[0] || "",
+      image_urls: imageUrls,
+      ai_recursive: Boolean(review.ai_recursive ?? page.ai_recursive),
+      widget_description: review.widget_description ?? page.widget_description,
+      aiInference: {
+        ...page.aiInference,
+        ...(review.ai_inference || {})
+      },
+      review_status: review.review_status || "edited",
+      review_note: review.review_note || ""
+    };
+  });
+  return rebuildGraphIndexes({ ...graph, pages });
+}
+
 export function normalizeBackendGraph(payload) {
   const graphPayload = payload?.data || payload?.result || payload;
   const { rootItems, floatingItems } = splitGraphPayload(graphPayload);
@@ -95,6 +156,7 @@ export function normalizeBackendGraph(payload) {
       page_title: rawTitle,
       page_text: pageText,
       image_url: rawNode.image_url || "",
+      image_urls: normalizeImageUrls(rawNode),
       page_url: rawNode.page_url || "",
       page_info: rawNode.page_info || {},
       widget_description: getWidgetDescription(rawNode),

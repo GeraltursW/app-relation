@@ -6,6 +6,7 @@ import TreeNav from "./components/TreeNav.vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  applyPageReviewToGraph,
   createEmptyGraph,
   mergeFloatingPageIntoGraph,
   moveGraphNode,
@@ -13,7 +14,8 @@ import {
   queryAppGraph,
   requestAiExploreFloatingPage,
   requestManualMergeFloatingPage,
-  requestMergeFloatingPage
+  requestMergeFloatingPage,
+  requestSavePageReview
 } from "./data/graph.js";
 
 const appName = ref(import.meta.env.VITE_DEFAULT_APP_NAME || "demo");
@@ -221,6 +223,25 @@ function moveTreeNode({ nodeId, targetParentId }) {
   window.setTimeout(() => graphRef.value?.fitGraph(), 80);
 }
 
+async function savePageReview(review) {
+  const page = graph.value.pageMap.get(review.nodeId);
+  if (!page) return;
+  let payload = review;
+  try {
+    const response = await requestSavePageReview(page, review);
+    payload = response?.data || response?.result || response || review;
+  } catch (error) {
+    payload = {
+      ...review,
+      review_status: "edited_local",
+      review_note: `${review.review_note || ""}${review.review_note ? "\n" : ""}后端暂不可用，已本地保存待同步。`
+    };
+  }
+  graph.value = applyPageReviewToGraph(graph.value, review.nodeId, payload);
+  selected.value = { type: "node", id: review.nodeId };
+  layoutRevision.value += 1;
+}
+
 onMounted(loadGraph);
 </script>
 
@@ -327,6 +348,7 @@ onMounted(loadGraph);
       :graph="graph"
       :selected="selected"
       :payload="selectedPayload"
+      @save-page-review="savePageReview"
     />
   </div>
 </template>
