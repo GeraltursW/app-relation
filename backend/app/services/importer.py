@@ -1,4 +1,5 @@
 import json
+import hashlib
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -118,6 +119,7 @@ class AiFolderImporter:
             canonical = CanonicalPage(
                 app_id=app_id,
                 canonical_page_key=page_key,
+                page_hash_id=hashlib.sha256(f"{app_id}:{structure_hash}".encode()).hexdigest()[:32],
                 display_name=page.get("page_title") or page_key,
                 page_type=page.get("page_type") or "unknown",
                 representative_asset_id=screenshot_asset.asset_id if screenshot_asset else None,
@@ -145,6 +147,9 @@ class AiFolderImporter:
             ocr_text=page.get("ocr_text"),
             ai_summary=page.get("ai_summary"),
             inferred_purpose=page.get("inferred_purpose"),
+            page_url=page.get("page_url"),
+            images=page.get("images") or [],
+            ai_inference=page.get("ai_inference") or {},
             confidence=page.get("confidence"),
             raw_ai_payload=page,
             normalized_payload=page.get("normalized_payload"),
@@ -244,4 +249,3 @@ def _guess_mime(path: Path) -> str:
     if suffix == ".webp":
         return "image/webp"
     return "application/octet-stream"
-
