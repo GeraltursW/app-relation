@@ -15,7 +15,84 @@
 
 ## 2. 后端需要准备
 
-### 2.1 建议数据表
+### 2.1 全量路径生成策略
+
+终点采集用例由后端按图谱版本统一生成，规则如下：
+
+1. 只遍历已并入主图谱的节点，默认排除游离节点。
+2. 每个根节点到每个叶子节点的路径生成一条独立用例。
+3. 路径必须保存完整 `page_id`、`edge_id` 和控件动作快照。
+4. 用例唯一键建议为：
+
+```text
+app_id + graph_version + case_type + target_page_id
+```
+
+5. 同一图谱版本重复生成时执行幂等 upsert。
+6. 图谱版本变化后生成新覆盖集，旧用例标记为 `stale`，不要直接覆盖历史运行记录。
+7. 如果一个终点存在多条不同可达路径，应按路径指纹分别生成用例：
+
+```text
+path_fingerprint = hash(page_id_1 + edge_id_1 + ... + target_page_id)
+```
+
+建议接口：
+
+```http
+POST /test_cases/generate-path-coverage
+GET  /test_cases/coverage?app_name=QQ&graph_version=xxx
+```
+
+生成响应：
+
+```json
+{
+  "status": "success",
+  "graph_version": "qq-20260717-01",
+  "leaf_count": 220,
+  "generated_count": 220,
+  "valid_count": 220,
+  "stale_count": 0,
+  "coverage_rate": 1.0
+}
+```
+
+当前 Demo 数据是一棵树，因此叶子数等于路径数。未来图谱允许多父节点或回边时，后端必须按简单路径遍历并设置最大深度，避免环路。
+
+### 2.2 过程采集组合策略
+
+过程采集不应该全排列生成。推荐采用“官方模板 + 业务模板 + 用户配置”三级来源：
+
+```text
+官方模板：滑动浏览、长按、点击、输入、返回
+业务模板：信息流浏览、直播互动、聊天连续发送
+用户配置：任意起点 + 任意操作序列 + 自定义采集指标
+```
+
+后端保存用户提交的完整步骤 JSON，并进行以下校验：
+
+- 起始 `page_id` 存在。
+- 操作类型在白名单内。
+- 重复次数、持续时间和总执行时长不超过上限。
+- 滑动方向和坐标参数合法。
+- 设备支持所选采集指标。
+- 高风险操作需要额外确认。
+
+组合模板可以使用参数变量：
+
+```json
+{
+  "template_code": "feed_scroll",
+  "parameters": {
+    "direction": "up",
+    "repeat": 5,
+    "duration_ms": 420,
+    "stay_ms": 1800
+  }
+}
+```
+
+### 2.3 建议数据表
 
 #### test_cases
 
@@ -89,7 +166,7 @@ temperature_c       numeric
 raw_metrics         jsonb
 ```
 
-### 2.2 建议接口
+### 2.4 建议接口
 
 ```http
 GET    /test_cases?app_name=QQ
@@ -97,6 +174,9 @@ POST   /test_cases
 PUT    /test_cases/{case_id}
 DELETE /test_cases/{case_id}
 
+POST   /test_cases/generate-path-coverage
+GET    /test_cases/coverage
+GET    /test_case_templates
 POST   /test_cases/{case_id}/validate
 POST   /test_cases/{case_id}/dispatch
 
@@ -111,7 +191,7 @@ GET    /test_runs/{run_id}/stream
 
 `/stream` 推荐使用 SSE；如果后续需要网页向脚本发送暂停、继续、人工确认等双向命令，再升级为 WebSocket。
 
-### 2.3 下发请求示例
+### 2.5 下发请求示例
 
 ```json
 {
