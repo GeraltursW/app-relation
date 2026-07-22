@@ -1,5 +1,11 @@
 # 图谱用例编排后端与脚本契约
 
+AI 如何从四层动作生成单应用及跨应用全场景用例，参见：
+
+```text
+docs/ai-full-scenario-test-case-generation.md
+```
+
 ## 1. 系统职责
 
 建议将能力拆成四层：
